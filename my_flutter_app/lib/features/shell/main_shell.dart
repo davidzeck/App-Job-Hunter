@@ -1,0 +1,77 @@
+import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
+import 'package:job_scout/core/services/mock_data.dart';
+import 'package:job_scout/core/theme/app_theme.dart';
+
+class MainShell extends StatelessWidget {
+  final Widget child;
+
+  const MainShell({super.key, required this.child});
+
+  static const _tabs = [
+    '/home',
+    '/jobs',
+    '/companies',
+    '/alerts',
+    '/profile',
+  ];
+
+  int _currentIndex(BuildContext context) {
+    final location = GoRouterState.of(context).matchedLocation;
+    for (int i = 0; i < _tabs.length; i++) {
+      if (location.startsWith(_tabs[i])) return i;
+    }
+    return 0;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final index = _currentIndex(context);
+    final unreadCount = mockAlerts.where((a) => !a.isRead).length;
+
+    return Scaffold(
+      body: child,
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: index,
+        onDestinationSelected: (i) => context.go(_tabs[i]),
+        destinations: [
+          const NavigationDestination(
+            icon: Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home),
+            label: 'Home',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.work_outline),
+            selectedIcon: Icon(Icons.work),
+            label: 'Jobs',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.business_outlined),
+            selectedIcon: Icon(Icons.business),
+            label: 'Companies',
+          ),
+          NavigationDestination(
+            icon: Badge(
+              isLabelVisible: unreadCount > 0,
+              label: Text('$unreadCount'),
+              backgroundColor: AppColors.destructive,
+              child: const Icon(Icons.notifications_outlined),
+            ),
+            selectedIcon: Badge(
+              isLabelVisible: unreadCount > 0,
+              label: Text('$unreadCount'),
+              backgroundColor: AppColors.destructive,
+              child: const Icon(Icons.notifications),
+            ),
+            label: 'Alerts',
+          ),
+          const NavigationDestination(
+            icon: Icon(Icons.person_outline),
+            selectedIcon: Icon(Icons.person),
+            label: 'Profile',
+          ),
+        ],
+      ),
+    );
+  }
+}
