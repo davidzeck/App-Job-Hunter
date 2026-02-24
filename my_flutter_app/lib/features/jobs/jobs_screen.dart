@@ -1,8 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:job_scout/core/models/models.dart';
-import 'package:job_scout/core/services/mock_api_service.dart';
+import 'package:job_scout/core/providers/jobs_filter_provider.dart';
+import 'package:job_scout/core/services/service_locator.dart';
 import 'package:job_scout/core/theme/app_theme.dart';
+import 'package:job_scout/core/widgets/error_state.dart';
 import 'package:job_scout/core/widgets/job_card.dart';
+import 'package:job_scout/core/widgets/skeleton_loader.dart';
 
 class JobsScreen extends StatefulWidget {
   const JobsScreen({super.key});
@@ -12,52 +18,148 @@ class JobsScreen extends StatefulWidget {
 }
 
 class _JobsScreenState extends State<JobsScreen> {
-  final _api = MockApiService();
+  final _api = api;
   final _searchController = TextEditingController();
+  final _scrollController = ScrollController();
+  JobsFilterProvider? _jobsFilter;
 
   List<JobListItem> _jobs = [];
   bool _loading = true;
+  bool _loadingMore = false;
+  String? _error;
   String? _locationType;
   int _daysAgo = 7;
+  int _page = 1;
+  int _totalPages = 1;
+  Timer? _debounce;
 
+  static const _limit = 5; // small limit so pagination is visible with mock data
   static const _dayOptions = [1, 3, 7, 14, 30];
 
   @override
   void initState() {
     super.initState();
-    _loadJobs();
+    _scrollController.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _jobsFilter = context.read<JobsFilterProvider>();
+      _jobsFilter!.addListener(_onCompanyFilterChanged);
+      _loadJobs();
+    });
   }
 
   @override
   void dispose() {
     _searchController.dispose();
+    _scrollController.dispose();
+    _debounce?.cancel();
+    _jobsFilter?.removeListener(_onCompanyFilterChanged);
     super.dispose();
   }
 
-  Future<void> _loadJobs() async {
-    setState(() => _loading = true);
-    final result = await _api.getJobs(
-      role: _searchController.text.isNotEmpty ? _searchController.text : null,
-      locationType: _locationType,
-      daysAgo: _daysAgo,
-      limit: 50,
-    );
-    setState(() {
-      _jobs = result.items;
-      _loading = false;
+  void _onCompanyFilterChanged() {
+    if (mounted) _resetAndLoad();
+  }
+
+  // ─── Search debounce ─────────────────────────────
+
+  void _onSearchChanged(String _) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      _resetAndLoad();
     });
+  }
+
+  // ─── Scroll-to-bottom pagination ─────────────────
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 200) {
+      _loadMore();
+    }
+  }
+
+  // ─── Load (reset to page 1) ───────────────────────
+
+  Future<void> _loadJobs() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+      _page = 1;
+    });
+    try {
+      final companySlug = _jobsFilter?.companySlug;
+      final result = await _api.getJobs(
+        companySlugs: companySlug != null ? [companySlug] : null,
+        role: _searchController.text.isNotEmpty ? _searchController.text : null,
+        locationType: _locationType,
+        daysAgo: _daysAgo,
+        page: 1,
+        limit: _limit,
+      );
+      if (mounted) {
+        setState(() {
+          _jobs = result.items;
+          _totalPages = result.pages;
+          _page = 1;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to load jobs. Tap to retry.';
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  void _resetAndLoad() {
+    _scrollController.jumpTo(0);
+    _loadJobs();
+  }
+
+  // ─── Load next page ───────────────────────────────
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || _page >= _totalPages) return;
+    setState(() => _loadingMore = true);
+    try {
+      final companySlug = _jobsFilter?.companySlug;
+      final result = await _api.getJobs(
+        companySlugs: companySlug != null ? [companySlug] : null,
+        role: _searchController.text.isNotEmpty ? _searchController.text : null,
+        locationType: _locationType,
+        daysAgo: _daysAgo,
+        page: _page + 1,
+        limit: _limit,
+      );
+      if (mounted) {
+        setState(() {
+          _jobs = [..._jobs, ...result.items];
+          _page = result.page;
+          _totalPages = result.pages;
+          _loadingMore = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingMore = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
+    final jobsFilter = context.watch<JobsFilterProvider>();
 
     return Scaffold(
       body: RefreshIndicator(
         onRefresh: _loadJobs,
         color: AppColors.primaryBlue,
         child: CustomScrollView(
+          controller: _scrollController,
           slivers: [
             // ─── App Bar ─────────────────────────────
             SliverAppBar(
@@ -74,7 +176,8 @@ class _JobsScreenState extends State<JobsScreen> {
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
                   child: TextField(
                     controller: _searchController,
-                    onSubmitted: (_) => _loadJobs(),
+                    onChanged: _onSearchChanged,
+                    onSubmitted: (_) => _resetAndLoad(),
                     decoration: InputDecoration(
                       hintText: 'Search by role or keyword...',
                       prefixIcon: const Icon(Icons.search, size: 20),
@@ -83,7 +186,7 @@ class _JobsScreenState extends State<JobsScreen> {
                               icon: const Icon(Icons.clear, size: 18),
                               onPressed: () {
                                 _searchController.clear();
-                                _loadJobs();
+                                _resetAndLoad();
                               },
                             )
                           : null,
@@ -105,7 +208,6 @@ class _JobsScreenState extends State<JobsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Location type
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -115,7 +217,7 @@ class _JobsScreenState extends State<JobsScreen> {
                             selected: _locationType == null,
                             onSelected: () {
                               setState(() => _locationType = null);
-                              _loadJobs();
+                              _resetAndLoad();
                             },
                           ),
                           _FilterChip(
@@ -123,7 +225,7 @@ class _JobsScreenState extends State<JobsScreen> {
                             selected: _locationType == 'remote',
                             onSelected: () {
                               setState(() => _locationType = 'remote');
-                              _loadJobs();
+                              _resetAndLoad();
                             },
                           ),
                           _FilterChip(
@@ -131,7 +233,7 @@ class _JobsScreenState extends State<JobsScreen> {
                             selected: _locationType == 'hybrid',
                             onSelected: () {
                               setState(() => _locationType = 'hybrid');
-                              _loadJobs();
+                              _resetAndLoad();
                             },
                           ),
                           _FilterChip(
@@ -139,14 +241,13 @@ class _JobsScreenState extends State<JobsScreen> {
                             selected: _locationType == 'onsite',
                             onSelected: () {
                               setState(() => _locationType = 'onsite');
-                              _loadJobs();
+                              _resetAndLoad();
                             },
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(height: 8),
-                    // Days ago
                     SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: Row(
@@ -156,12 +257,30 @@ class _JobsScreenState extends State<JobsScreen> {
                             selected: _daysAgo == d,
                             onSelected: () {
                               setState(() => _daysAgo = d);
-                              _loadJobs();
+                              _resetAndLoad();
                             },
                           );
                         }).toList(),
                       ),
                     ),
+                    if (jobsFilter.hasCompanyFilter)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Row(
+                          children: [
+                            FilterChip(
+                              label: Text(jobsFilter.companyName ?? ''),
+                              selected: true,
+                              onSelected: (_) {},
+                              deleteIcon: const Icon(Icons.close, size: 14),
+                              onDeleted: () =>
+                                  _jobsFilter?.clearCompanyFilter(),
+                              showCheckmark: false,
+                              avatar: const Icon(Icons.business, size: 14),
+                            ),
+                          ],
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -172,7 +291,11 @@ class _JobsScreenState extends State<JobsScreen> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
                 child: Text(
-                  _loading ? 'Loading...' : '${_jobs.length} jobs found',
+                  _loading
+                      ? 'Searching...'
+                      : _error != null
+                          ? ''
+                          : '${_jobs.length} jobs found',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: isDark
                         ? AppColors.mutedForegroundDark
@@ -182,10 +305,20 @@ class _JobsScreenState extends State<JobsScreen> {
               ),
             ),
 
-            // ─── Job List ────────────────────────────
+            // ─── States ──────────────────────────────
             if (_loading)
-              const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (_, __) => const SkeletonJobCard(),
+                  childCount: 6,
+                ),
+              )
+            else if (_error != null)
+              SliverFillRemaining(
+                child: ErrorStateWidget(
+                  message: _error!,
+                  onRetry: _loadJobs,
+                ),
               )
             else if (_jobs.isEmpty)
               SliverFillRemaining(
@@ -217,7 +350,13 @@ class _JobsScreenState extends State<JobsScreen> {
                             _daysAgo = 30;
                             _searchController.clear();
                           });
-                          _loadJobs();
+                          if (_jobsFilter?.hasCompanyFilter == true) {
+                            // clearCompanyFilter notifies listeners →
+                            // _onCompanyFilterChanged → _resetAndLoad
+                            _jobsFilter!.clearCompanyFilter();
+                          } else {
+                            _resetAndLoad();
+                          }
                         },
                         child: const Text('Clear filters'),
                       ),
@@ -225,7 +364,7 @@ class _JobsScreenState extends State<JobsScreen> {
                   ),
                 ),
               )
-            else
+            else ...[
               SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) => JobCard(
@@ -236,7 +375,35 @@ class _JobsScreenState extends State<JobsScreen> {
                 ),
               ),
 
-            // Bottom padding
+              // ─── Load More Indicator ─────────────
+              SliverToBoxAdapter(
+                child: _page < _totalPages
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        child: Center(
+                          child: _loadingMore
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: AppColors.primaryBlue,
+                                  ),
+                                )
+                              : Text(
+                                  'Scroll for more',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: isDark
+                                        ? AppColors.mutedForegroundDark
+                                        : AppColors.mutedForegroundLight,
+                                  ),
+                                ),
+                        ),
+                      )
+                    : const SizedBox(height: 8),
+              ),
+            ],
+
             const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
           ],
         ),
@@ -244,6 +411,8 @@ class _JobsScreenState extends State<JobsScreen> {
     );
   }
 }
+
+// ─── Filter Chip ───────────────────────────────────────────────
 
 class _FilterChip extends StatelessWidget {
   final String label;

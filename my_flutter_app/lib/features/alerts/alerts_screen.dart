@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:job_scout/core/models/models.dart';
-import 'package:job_scout/core/services/mock_api_service.dart';
+import 'package:job_scout/core/providers/alerts_provider.dart';
+import 'package:job_scout/core/services/service_locator.dart';
 import 'package:job_scout/core/theme/app_theme.dart';
+import 'package:job_scout/core/widgets/error_state.dart';
+import 'package:job_scout/core/widgets/skeleton_loader.dart';
 
 class AlertsScreen extends StatefulWidget {
   const AlertsScreen({super.key});
@@ -13,34 +18,187 @@ class AlertsScreen extends StatefulWidget {
 }
 
 class _AlertsScreenState extends State<AlertsScreen> {
-  final _api = MockApiService();
+  final _api = api;
+  final _scrollController = ScrollController();
   List<AlertResponse> _alerts = [];
   bool _loading = true;
+  bool _loadingMore = false;
+  String? _error;
   bool _unreadOnly = false;
+  int _page = 1;
+  int _totalPages = 1;
+
+  static const _limit = 4;
 
   @override
   void initState() {
     super.initState();
     _loadAlerts();
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >=
+        _scrollController.position.maxScrollExtent - 150) {
+      _loadMore();
+    }
   }
 
   Future<void> _loadAlerts() async {
-    setState(() => _loading = true);
-    final result = await _api.getAlerts(unreadOnly: _unreadOnly);
     setState(() {
-      _alerts = result.items;
-      _loading = false;
+      _loading = true;
+      _error = null;
+      _page = 1;
     });
+    try {
+      final result = await _api.getAlerts(
+        unreadOnly: _unreadOnly,
+        page: 1,
+        limit: _limit,
+      );
+      if (mounted) {
+        setState(() {
+          _alerts = result.items;
+          _totalPages = result.pages;
+          _page = 1;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = 'Failed to load alerts. Tap to retry.';
+          _loading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _loadMore() async {
+    if (_loadingMore || _page >= _totalPages) return;
+    setState(() => _loadingMore = true);
+    try {
+      final result = await _api.getAlerts(
+        unreadOnly: _unreadOnly,
+        page: _page + 1,
+        limit: _limit,
+      );
+      if (mounted) {
+        setState(() {
+          _alerts = [..._alerts, ...result.items];
+          _page = result.page;
+          _totalPages = result.pages;
+          _loadingMore = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingMore = false);
+    }
   }
 
   Future<void> _markRead(String alertId) async {
     await _api.markAlertRead(alertId);
+    if (!mounted) return;
     _loadAlerts();
+    context.read<AlertsProvider>().refresh();
   }
 
   Future<void> _toggleSaved(String alertId) async {
     await _api.toggleAlertSaved(alertId);
+    if (!mounted) return;
     _loadAlerts();
+    context.read<AlertsProvider>().refresh();
+  }
+
+  Future<void> _markApplied(String alertId) async {
+    await _api.markAlertApplied(alertId);
+    if (!mounted) return;
+    _loadAlerts();
+    context.read<AlertsProvider>().refresh();
+  }
+
+  void _showContextMenu(BuildContext context, AlertResponse alert) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        return Container(
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+          decoration: BoxDecoration(
+            color: isDark ? AppColors.cardDark : AppColors.cardLight,
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: isDark ? AppColors.mutedDark : AppColors.mutedLight,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text(
+                  alert.job.title,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Divider(height: 1),
+              if (!alert.isRead)
+                ListTile(
+                  leading: const Icon(Icons.mark_email_read,
+                      color: AppColors.primaryBlue),
+                  title: const Text('Mark as Read'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _markRead(alert.id);
+                  },
+                ),
+              if (!alert.isApplied)
+                ListTile(
+                  leading: const Icon(Icons.check_circle_outline,
+                      color: AppColors.success),
+                  title: const Text('Mark as Applied'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _markApplied(alert.id);
+                  },
+                ),
+              ListTile(
+                leading: Icon(
+                  alert.isSaved ? Icons.bookmark : Icons.bookmark_border,
+                  color: AppColors.warning,
+                ),
+                title: Text(alert.isSaved ? 'Remove from Saved' : 'Save Job'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _toggleSaved(alert.id);
+                },
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -53,6 +211,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
         onRefresh: _loadAlerts,
         color: AppColors.primaryBlue,
         child: CustomScrollView(
+          controller: _scrollController,
           slivers: [
             // ─── App Bar ─────────────────────────────
             SliverAppBar(
@@ -103,10 +262,20 @@ class _AlertsScreenState extends State<AlertsScreen> {
               ),
             ),
 
-            // ─── Alert List ──────────────────────────
+            // ─── States ──────────────────────────────
             if (_loading)
-              const SliverFillRemaining(
-                child: Center(child: CircularProgressIndicator()),
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (_, __) => const SkeletonAlertRow(),
+                  childCount: 6,
+                ),
+              )
+            else if (_error != null)
+              SliverFillRemaining(
+                child: ErrorStateWidget(
+                  message: _error!,
+                  onRetry: _loadAlerts,
+                ),
               )
             else if (_alerts.isEmpty)
               SliverFillRemaining(
@@ -143,7 +312,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
                   ),
                 ),
               )
-            else
+            else ...[
               SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
@@ -155,6 +324,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
                         if (!alert.isRead) _markRead(alert.id);
                         context.push('/jobs/${alert.job.id}');
                       },
+                      onLongPress: () => _showContextMenu(context, alert),
                       onSwipeRight: () => _markRead(alert.id),
                       onSwipeLeft: () => _toggleSaved(alert.id),
                     );
@@ -162,6 +332,35 @@ class _AlertsScreenState extends State<AlertsScreen> {
                   childCount: _alerts.length,
                 ),
               ),
+
+              // ─── Load More Indicator ─────────────
+              SliverToBoxAdapter(
+                child: _page < _totalPages
+                    ? Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        child: Center(
+                          child: _loadingMore
+                              ? const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2.5,
+                                    color: AppColors.primaryBlue,
+                                  ),
+                                )
+                              : Text(
+                                  'Scroll for more',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                    color: isDark
+                                        ? AppColors.mutedForegroundDark
+                                        : AppColors.mutedForegroundLight,
+                                  ),
+                                ),
+                        ),
+                      )
+                    : const SizedBox(height: 8),
+              ),
+            ],
 
             const SliverPadding(padding: EdgeInsets.only(bottom: 24)),
           ],
@@ -175,6 +374,7 @@ class _AlertItem extends StatelessWidget {
   final AlertResponse alert;
   final int index;
   final VoidCallback onTap;
+  final VoidCallback onLongPress;
   final VoidCallback onSwipeRight;
   final VoidCallback onSwipeLeft;
 
@@ -182,6 +382,7 @@ class _AlertItem extends StatelessWidget {
     required this.alert,
     required this.index,
     required this.onTap,
+    required this.onLongPress,
     required this.onSwipeRight,
     required this.onSwipeLeft,
   });
@@ -219,6 +420,7 @@ class _AlertItem extends StatelessWidget {
         ),
       ),
       confirmDismiss: (direction) async {
+        HapticFeedback.mediumImpact();
         if (direction == DismissDirection.startToEnd) {
           onSwipeRight();
         } else {
@@ -228,6 +430,7 @@ class _AlertItem extends StatelessWidget {
       },
       child: InkWell(
         onTap: onTap,
+        onLongPress: onLongPress,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
           child: Row(

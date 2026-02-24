@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:job_scout/core/services/mock_data.dart';
+import 'package:provider/provider.dart';
+import 'package:job_scout/core/providers/alerts_provider.dart';
 import 'package:job_scout/core/theme/app_theme.dart';
 
-class MainShell extends StatelessWidget {
+class MainShell extends StatefulWidget {
   final Widget child;
 
   const MainShell({super.key, required this.child});
 
+  @override
+  State<MainShell> createState() => _MainShellState();
+}
+
+class _MainShellState extends State<MainShell> {
   static const _tabs = [
     '/home',
     '/jobs',
@@ -15,6 +21,15 @@ class MainShell extends StatelessWidget {
     '/alerts',
     '/profile',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // Kick off the first refresh after the first frame so the provider is ready
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<AlertsProvider>().refresh();
+    });
+  }
 
   int _currentIndex(BuildContext context) {
     final location = GoRouterState.of(context).matchedLocation;
@@ -27,10 +42,10 @@ class MainShell extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final index = _currentIndex(context);
-    final unreadCount = mockAlerts.where((a) => !a.isRead).length;
+    final unreadCount = context.watch<AlertsProvider>().unreadCount;
 
     return Scaffold(
-      body: child,
+      body: widget.child,
       bottomNavigationBar: NavigationBar(
         selectedIndex: index,
         onDestinationSelected: (i) => context.go(_tabs[i]),

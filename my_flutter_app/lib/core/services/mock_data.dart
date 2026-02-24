@@ -3,6 +3,18 @@ import 'package:job_scout/core/models/models.dart';
 /// Static mock data matching the backend's seed data.
 /// Used by MockApiService to simulate API responses.
 
+// Mutable skills list — modified by skills screen
+var mockUserSkills = <String>[
+  'Python',
+  'FastAPI',
+  'PostgreSQL',
+  'Docker',
+  'React',
+  'TypeScript',
+  'Redis',
+  'AWS',
+];
+
 final mockUser = UserProfileResponse(
   id: 'u-001',
   email: 'dev@jobscout.com',

@@ -3,11 +3,12 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:job_scout/core/models/models.dart';
+import 'package:job_scout/core/providers/alerts_provider.dart';
 import 'package:job_scout/core/providers/auth_provider.dart';
-import 'package:job_scout/core/services/mock_api_service.dart';
-import 'package:job_scout/core/services/mock_data.dart';
+import 'package:job_scout/core/services/service_locator.dart';
 import 'package:job_scout/core/theme/app_theme.dart';
 import 'package:job_scout/core/widgets/job_card.dart';
+import 'package:job_scout/core/widgets/skeleton_loader.dart';
 import 'package:job_scout/core/widgets/stat_card.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -18,7 +19,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _api = MockApiService();
+  final _api = api;
   List<JobListItem> _recentJobs = [];
   bool _loading = true;
 
@@ -28,13 +29,20 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadData();
   }
 
+  /// Refreshes the jobs list and the alerts provider (stats + recent alerts)
+  /// in parallel so both complete before the spinner disappears.
   Future<void> _loadData() async {
     setState(() => _loading = true);
-    final result = await _api.getJobs(limit: 5, daysAgo: 30);
-    setState(() {
-      _recentJobs = result.items;
-      _loading = false;
-    });
+    final jobsFuture = _api.getJobs(limit: 5, daysAgo: 30);
+    final alertsFuture = context.read<AlertsProvider>().refresh();
+    final result = await jobsFuture;
+    await alertsFuture;
+    if (mounted) {
+      setState(() {
+        _recentJobs = result.items;
+        _loading = false;
+      });
+    }
   }
 
   @override
@@ -42,7 +50,9 @@ class _HomeScreenState extends State<HomeScreen> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final user = context.watch<AuthProvider>().user;
-    final stats = mockDashboardStats;
+    final alertsProvider = context.watch<AlertsProvider>();
+    final stats = alertsProvider.stats;
+    final recentAlerts = alertsProvider.recentAlerts;
     final greeting = _greeting();
 
     return Scaffold(
@@ -89,36 +99,43 @@ class _HomeScreenState extends State<HomeScreen> {
                 mainAxisSpacing: 8,
                 crossAxisSpacing: 8,
                 childAspectRatio: 1.5,
-                children: [
-                  StatCard(
-                    icon: Icons.work_outline,
-                    label: 'Total Jobs',
-                    value: '${stats['totalJobs']}',
-                    color: AppColors.primaryBlue,
-                    animationIndex: 0,
-                  ),
-                  StatCard(
-                    icon: Icons.fiber_new,
-                    label: 'New Today',
-                    value: '${stats['newToday']}',
-                    color: AppColors.success,
-                    animationIndex: 1,
-                  ),
-                  StatCard(
-                    icon: Icons.notifications_active_outlined,
-                    label: 'Unread Alerts',
-                    value: '${stats['unreadAlerts']}',
-                    color: AppColors.warning,
-                    animationIndex: 2,
-                  ),
-                  StatCard(
-                    icon: Icons.check_circle_outline,
-                    label: 'Applied',
-                    value: '${stats['applied']}',
-                    color: AppColors.success,
-                    animationIndex: 3,
-                  ),
-                ],
+                children: alertsProvider.loaded
+                    ? [
+                        StatCard(
+                          icon: Icons.work_outline,
+                          label: 'Total Jobs',
+                          value: '${stats['totalJobs']}',
+                          color: AppColors.primaryBlue,
+                          animationIndex: 0,
+                        ),
+                        StatCard(
+                          icon: Icons.fiber_new,
+                          label: 'New Today',
+                          value: '${stats['newToday']}',
+                          color: AppColors.success,
+                          animationIndex: 1,
+                        ),
+                        StatCard(
+                          icon: Icons.notifications_active_outlined,
+                          label: 'Unread Alerts',
+                          value: '${stats['unreadAlerts']}',
+                          color: AppColors.warning,
+                          animationIndex: 2,
+                        ),
+                        StatCard(
+                          icon: Icons.check_circle_outline,
+                          label: 'Applied',
+                          value: '${stats['applied']}',
+                          color: AppColors.success,
+                          animationIndex: 3,
+                        ),
+                      ]
+                    : const [
+                        SkeletonStatCard(),
+                        SkeletonStatCard(),
+                        SkeletonStatCard(),
+                        SkeletonStatCard(),
+                      ],
               ),
             ),
 
@@ -135,26 +152,47 @@ class _HomeScreenState extends State<HomeScreen> {
             SliverToBoxAdapter(
               child: SizedBox(
                 height: 100,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  itemCount: mockAlerts.take(4).length,
-                  itemBuilder: (context, index) {
-                    final alert = mockAlerts[index];
-                    return _MiniAlertCard(alert: alert, index: index)
-                        .animate()
-                        .fadeIn(
-                          delay: Duration(milliseconds: index * 100),
-                          duration: 400.ms,
-                        )
-                        .slideX(
-                          begin: 0.1,
-                          delay: Duration(milliseconds: index * 100),
-                          duration: 400.ms,
-                          curve: Curves.easeOut,
-                        );
-                  },
-                ),
+                child: !alertsProvider.loaded
+                    ? ListView.builder(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        itemCount: 4,
+                        itemBuilder: (_, __) => const SkeletonMiniAlert(),
+                      )
+                    : recentAlerts.isEmpty
+                        ? Center(
+                            child: Text(
+                              'No alerts yet',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: isDark
+                                    ? AppColors.mutedForegroundDark
+                                    : AppColors.mutedForegroundLight,
+                              ),
+                            ),
+                          )
+                        : ListView.builder(
+                            scrollDirection: Axis.horizontal,
+                            padding:
+                                const EdgeInsets.symmetric(horizontal: 12),
+                            itemCount: recentAlerts.length,
+                            itemBuilder: (context, index) {
+                              final alert = recentAlerts[index];
+                              return _MiniAlertCard(alert: alert, index: index)
+                                  .animate()
+                                  .fadeIn(
+                                    delay:
+                                        Duration(milliseconds: index * 100),
+                                    duration: 400.ms,
+                                  )
+                                  .slideX(
+                                    begin: 0.1,
+                                    delay:
+                                        Duration(milliseconds: index * 100),
+                                    duration: 400.ms,
+                                    curve: Curves.easeOut,
+                                  );
+                            },
+                          ),
               ),
             ),
 
@@ -295,10 +333,12 @@ class _MiniAlertCard extends StatelessWidget {
                 Row(
                   children: [
                     if (alert.isSaved)
-                      const Icon(Icons.bookmark, size: 14, color: AppColors.warning),
+                      const Icon(Icons.bookmark,
+                          size: 14, color: AppColors.warning),
                     if (alert.isApplied) ...[
                       const SizedBox(width: 4),
-                      const Icon(Icons.check_circle, size: 14, color: AppColors.success),
+                      const Icon(Icons.check_circle,
+                          size: 14, color: AppColors.success),
                     ],
                   ],
                 ),

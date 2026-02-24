@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:job_scout/core/providers/auth_provider.dart';
 import 'package:job_scout/core/theme/app_theme.dart';
+import 'package:job_scout/features/onboarding/onboarding_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -15,9 +17,27 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   void initState() {
     super.initState();
-    // Kick off initialization — the router redirect handles navigation
+    _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
     final auth = context.read<AuthProvider>();
-    Future.microtask(() => auth.initialize());
+    await auth.initialize();
+
+    if (!mounted) return;
+
+    // Router redirect handles the authenticated case → /home
+    if (auth.isAuthenticated) return;
+
+    // Not authenticated: check if onboarding has been shown before
+    final seen = await hasSeenOnboarding();
+    if (!mounted) return;
+
+    if (seen) {
+      context.go('/auth/login');
+    } else {
+      context.go('/onboarding');
+    }
   }
 
   @override

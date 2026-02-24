@@ -1,26 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:job_scout/core/models/models.dart';
-import 'package:job_scout/core/services/mock_api_service.dart';
+import 'package:job_scout/core/services/service_locator.dart';
+import 'package:job_scout/core/services/token_storage.dart';
 
 class AuthProvider extends ChangeNotifier {
-  final _api = MockApiService();
+  final _storage = TokenStorage.instance;
 
   UserProfileResponse? _user;
-  TokenResponse? _tokens;
   bool _isLoading = false;
   bool _isInitialized = false;
   String? _error;
 
-  bool get isAuthenticated => _tokens != null;
+  bool get isAuthenticated => _storage.hasTokens;
   bool get isLoading => _isLoading;
   bool get isInitialized => _isInitialized;
   UserProfileResponse? get user => _user;
   String? get error => _error;
 
-  /// Called on app launch to check for existing session.
-  /// In a real app this would read tokens from secure storage.
+  /// Called on app launch.
+  /// Loads tokens from secure storage; if valid, fetches the user profile.
   Future<void> initialize() async {
-    await Future.delayed(const Duration(seconds: 2)); // Splash delay
+    await _storage.load();
+
+    if (_storage.hasTokens) {
+      try {
+        _user = await api.getCurrentUser();
+      } catch (_) {
+        // Token expired / network failure — clear and go to login
+        await _storage.clear();
+      }
+    }
+
     _isInitialized = true;
     notifyListeners();
   }
@@ -31,8 +41,12 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _tokens = await _api.login(email, password);
-      _user = await _api.getCurrentUser();
+      final tokens = await api.login(email, password);
+      await _storage.save(
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      );
+      _user = await api.getCurrentUser();
       _isLoading = false;
       notifyListeners();
       return true;
@@ -50,8 +64,12 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      _tokens = await _api.register(email, password, fullName);
-      _user = await _api.getCurrentUser();
+      final tokens = await api.register(email, password, fullName);
+      await _storage.save(
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken,
+      );
+      _user = await api.getCurrentUser();
       _isLoading = false;
       notifyListeners();
       return true;
@@ -63,8 +81,8 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  void logout() {
-    _tokens = null;
+  Future<void> logout() async {
+    await _storage.clear();
     _user = null;
     _error = null;
     notifyListeners();

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:job_scout/core/providers/alerts_provider.dart';
 import 'package:job_scout/core/providers/auth_provider.dart';
+import 'package:job_scout/core/providers/jobs_filter_provider.dart';
 import 'package:job_scout/core/theme/app_theme.dart';
 import 'package:job_scout/core/theme/theme_provider.dart';
 import 'package:job_scout/core/router/app_router.dart';
@@ -11,6 +13,8 @@ void main() {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => AlertsProvider()),
+        ChangeNotifierProvider(create: (_) => JobsFilterProvider()),
       ],
       child: const JobScoutApp(),
     ),

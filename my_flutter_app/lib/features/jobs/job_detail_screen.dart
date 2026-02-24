@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:job_scout/core/models/models.dart';
-import 'package:job_scout/core/services/mock_api_service.dart';
+import 'package:job_scout/core/services/service_locator.dart';
 import 'package:job_scout/core/theme/app_theme.dart';
 
 class JobDetailScreen extends StatefulWidget {
@@ -14,11 +16,13 @@ class JobDetailScreen extends StatefulWidget {
 }
 
 class _JobDetailScreenState extends State<JobDetailScreen> {
-  final _api = MockApiService();
+  final _api = api;
   JobDetail? _job;
   SkillGapResponse? _skillGap;
   bool _loading = true;
   bool _skillGapExpanded = false;
+  bool _isSaved = false;
+  bool _isSaving = false;
 
   @override
   void initState() {
@@ -29,11 +33,43 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   Future<void> _loadData() async {
     final job = await _api.getJobDetail(widget.jobId);
     final gap = await _api.getSkillGap(widget.jobId);
+    final saved = _api.isJobSaved(widget.jobId);
     setState(() {
       _job = job;
       _skillGap = gap;
+      _isSaved = saved;
       _loading = false;
     });
+  }
+
+  Future<void> _toggleSave() async {
+    if (_isSaving) return;
+    HapticFeedback.lightImpact();
+    setState(() => _isSaving = true);
+    final nowSaved = await _api.toggleJobSaved(widget.jobId);
+    if (mounted) {
+      setState(() {
+        _isSaved = nowSaved;
+        _isSaving = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(nowSaved ? 'Job saved' : 'Removed from saved'),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
+  Future<void> _applyNow(String url) async {
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not open application link')),
+      );
+    }
   }
 
   @override
@@ -256,23 +292,22 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
         child: Row(
           children: [
             IconButton.outlined(
-              icon: const Icon(Icons.bookmark_border),
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Job saved!')),
-                );
-              },
+              icon: _isSaving
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Icon(
+                      _isSaved ? Icons.bookmark : Icons.bookmark_border,
+                      color: _isSaved ? AppColors.primaryBlue : null,
+                    ),
+              onPressed: _toggleSave,
             ),
             const SizedBox(width: 12),
             Expanded(
               child: FilledButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Opening application for ${job.title}...'),
-                    ),
-                  );
-                },
+                onPressed: () => _applyNow(job.applyUrl),
                 icon: const Icon(Icons.open_in_new, size: 18),
                 label: const Text(
                   'Apply Now',

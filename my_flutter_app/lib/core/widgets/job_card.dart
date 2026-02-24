@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 import 'package:job_scout/core/models/models.dart';
@@ -29,7 +30,10 @@ class JobCard extends StatelessWidget {
           margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
           child: InkWell(
             borderRadius: BorderRadius.circular(12),
-            onTap: () => context.push('/jobs/${job.id}'),
+            onTap: () {
+              HapticFeedback.lightImpact();
+              context.push('/jobs/${job.id}');
+            },
             child: Padding(
               padding: const EdgeInsets.all(14),
               child: Row(
