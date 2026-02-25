@@ -330,7 +330,7 @@ class _StatsRow extends StatelessWidget {
           label: 'CV',
           value: user.hasCv ? 'Uploaded' : 'Missing',
           icon: Icons.description_outlined,
-          color: user.hasCv ? AppColors.success : AppColors.warning,
+          color: user.hasCv ? AppColors.success : AppColors.destructive,
         ),
         const SizedBox(width: 12),
         _StatItem(
@@ -449,8 +449,10 @@ class _PreferencesCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final prefs = user.preferences;
-    final roles = (prefs['roles'] as List?)?.cast<String>() ?? [];
-    final locations = (prefs['locations'] as List?)?.cast<String>() ?? [];
+    final roles =
+        (prefs['roles'] as List?)?.whereType<String>().toList() ?? [];
+    final locations =
+        (prefs['locations'] as List?)?.whereType<String>().toList() ?? [];
 
     return Card(
       child: Padding(
@@ -681,6 +683,7 @@ class _AccountCard extends StatelessWidget {
       child: Column(
         children: [
           ListTile(
+            enabled: false,
             leading: Icon(
               Icons.upload_file_outlined,
               color: isDark
@@ -694,12 +697,22 @@ class _AccountCard extends StatelessWidget {
                   .bodyLarge
                   ?.copyWith(fontWeight: FontWeight.w600),
             ),
-            trailing: const Icon(Icons.chevron_right, size: 18),
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('CV upload coming soon')),
-              );
-            },
+            trailing: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppColors.mutedLight,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text(
+                'Soon',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.mutedForegroundLight,
+                ),
+              ),
+            ),
           ),
           const Divider(height: 1, indent: 56),
           ListTile(

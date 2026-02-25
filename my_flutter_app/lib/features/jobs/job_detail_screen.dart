@@ -554,6 +554,25 @@ class _SkillGapSection extends StatelessWidget {
                             detail: s.isRequired ? 'Required' : 'Nice to have',
                           )),
                     ],
+                    if (gap.matchingSkills.isEmpty &&
+                        gap.partialSkills.isEmpty &&
+                        gap.missingSkills.isEmpty)
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          child: Text(
+                            'No detailed skill breakdown available for this role.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Theme.of(context).brightness ==
+                                      Brightness.dark
+                                  ? AppColors.mutedForegroundDark
+                                  : AppColors.mutedForegroundLight,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),

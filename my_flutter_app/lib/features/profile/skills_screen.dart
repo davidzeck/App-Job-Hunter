@@ -109,10 +109,13 @@ class _SkillsScreenState extends State<SkillsScreen> {
     );
 
     if (added != null && mounted) {
-      await _api.addUserSkill(added);
-      setState(() {
-        if (!_skills.contains(added)) _skills.add(added);
-      });
+      final normalized = added.trim();
+      final alreadyExists =
+          _skills.any((s) => s.toLowerCase() == normalized.toLowerCase());
+      if (!alreadyExists) {
+        await _api.addUserSkill(normalized);
+        setState(() => _skills.add(normalized));
+      }
     }
   }
 

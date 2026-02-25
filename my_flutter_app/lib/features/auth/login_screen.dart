@@ -14,8 +14,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController(text: 'dev@jobscout.com');
-  final _passwordController = TextEditingController(text: 'password123');
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _obscurePassword = true;
 
   @override
@@ -205,14 +205,20 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   const SizedBox(height: 16),
 
-                  // Demo hint
-                  Text(
-                    'Demo: dev@jobscout.com / password123',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.brightness == Brightness.dark
-                          ? AppColors.mutedForegroundDark
-                          : AppColors.mutedForegroundLight,
-                      fontSize: 11,
+                  // Demo account shortcut
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _emailController.text = 'dev@jobscout.com';
+                        _passwordController.text = 'password123';
+                      });
+                    },
+                    child: Text(
+                      'Use demo account',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: AppColors.primaryBlue,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   )
                       .animate()

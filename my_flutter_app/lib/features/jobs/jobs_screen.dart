@@ -335,12 +335,15 @@ class _JobsScreenState extends State<JobsScreen> {
                       ),
                       const SizedBox(height: 16),
                       Text(
-                        'No jobs match your filters',
+                        jobsFilter.hasCompanyFilter
+                            ? 'No jobs found for ${jobsFilter.companyName}'
+                            : 'No jobs match your filters',
                         style: theme.textTheme.titleMedium?.copyWith(
                           color: isDark
                               ? AppColors.mutedForegroundDark
                               : AppColors.mutedForegroundLight,
                         ),
+                        textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 8),
                       TextButton(

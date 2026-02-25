@@ -5,6 +5,36 @@ import 'package:job_scout/core/models/models.dart';
 import 'package:job_scout/core/services/service_locator.dart';
 import 'package:job_scout/core/theme/app_theme.dart';
 
+// ─── Status helpers (shared by state + tile) ───────────────────
+
+IconData _statusIcon(String status) {
+  switch (status) {
+    case 'Interviewing':
+      return Icons.calendar_month_outlined;
+    case 'Offer':
+      return Icons.celebration_outlined;
+    case 'Rejected':
+      return Icons.cancel_outlined;
+    default:
+      return Icons.send_outlined;
+  }
+}
+
+Color _statusColor(String status) {
+  switch (status) {
+    case 'Interviewing':
+      return AppColors.primaryBlue;
+    case 'Offer':
+      return AppColors.success;
+    case 'Rejected':
+      return AppColors.destructive;
+    default:
+      return AppColors.warning;
+  }
+}
+
+// ─── Screen ────────────────────────────────────────────────────
+
 class AppliedScreen extends StatefulWidget {
   const AppliedScreen({super.key});
 
@@ -16,6 +46,12 @@ class _AppliedScreenState extends State<AppliedScreen> {
   final _api = api;
   List<AlertResponse> _applied = [];
   bool _loading = true;
+
+  /// Local status for each alert (alertId → status label).
+  /// Persisted optimistically via updatePreferences.
+  final Map<String, String> _statuses = {};
+
+  static const _allStatuses = ['Applied', 'Interviewing', 'Offer', 'Rejected'];
 
   @override
   void initState() {
@@ -29,13 +65,23 @@ class _AppliedScreenState extends State<AppliedScreen> {
       setState(() {
         _applied = result.items.where((a) => a.isApplied).toList()
           ..sort((a, b) => b.notifiedAt.compareTo(a.notifiedAt));
+        for (final alert in _applied) {
+          _statuses.putIfAbsent(alert.id, () => 'Applied');
+        }
         _loading = false;
       });
     }
   }
 
+  Future<void> _updateStatus(String alertId, String status) async {
+    setState(() => _statuses[alertId] = status);
+    await _api.updatePreferences({'applicationStatuses': _statuses});
+  }
+
   void _showStatusMenu(BuildContext context, AlertResponse alert) {
-    final statuses = ['Applied', 'Interviewing', 'Offer', 'Rejected'];
+    final current = _statuses[alert.id] ?? 'Applied';
+    final options = _allStatuses.where((s) => s != current).toList();
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -63,24 +109,51 @@ class _AppliedScreenState extends State<AppliedScreen> {
               ),
               const SizedBox(height: 8),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Text(
-                  'Update Status',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w700),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Update Status',
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleSmall
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    // Current status badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: _statusColor(current).withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        current,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: _statusColor(current),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const Divider(height: 1),
-              ...statuses.map((status) => ListTile(
-                    leading: Icon(
-                      _statusIcon(status),
-                      color: _statusColor(status),
-                    ),
-                    title: Text(status),
-                    onTap: () => Navigator.pop(context),
-                  )),
+              ...options.map(
+                (status) => ListTile(
+                  leading:
+                      Icon(_statusIcon(status), color: _statusColor(status)),
+                  title: Text(status),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _updateStatus(alert.id, status);
+                  },
+                ),
+              ),
               const SizedBox(height: 8),
             ],
           ),
@@ -169,8 +242,11 @@ class _AppliedScreenState extends State<AppliedScreen> {
                   (context, i) => _ApplicationTile(
                     alert: _applied[i],
                     index: i,
-                    onTap: () => context.push('/jobs/${_applied[i].job.id}'),
-                    onLongPress: () => _showStatusMenu(context, _applied[i]),
+                    status: _statuses[_applied[i].id] ?? 'Applied',
+                    onTap: () =>
+                        context.push('/jobs/${_applied[i].job.id}'),
+                    onLongPress: () =>
+                        _showStatusMenu(context, _applied[i]),
                   ),
                   childCount: _applied.length,
                 ),
@@ -181,24 +257,6 @@ class _AppliedScreenState extends State<AppliedScreen> {
       ),
     );
   }
-
-  static IconData _statusIcon(String status) {
-    switch (status) {
-      case 'Interviewing': return Icons.calendar_month_outlined;
-      case 'Offer': return Icons.celebration_outlined;
-      case 'Rejected': return Icons.cancel_outlined;
-      default: return Icons.send_outlined;
-    }
-  }
-
-  static Color _statusColor(String status) {
-    switch (status) {
-      case 'Interviewing': return AppColors.primaryBlue;
-      case 'Offer': return AppColors.success;
-      case 'Rejected': return AppColors.destructive;
-      default: return AppColors.warning;
-    }
-  }
 }
 
 // ─── Application Tile ──────────────────────────────────────────
@@ -206,12 +264,14 @@ class _AppliedScreenState extends State<AppliedScreen> {
 class _ApplicationTile extends StatelessWidget {
   final AlertResponse alert;
   final int index;
+  final String status;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
 
   const _ApplicationTile({
     required this.alert,
     required this.index,
+    required this.status,
     required this.onTap,
     required this.onLongPress,
   });
@@ -221,6 +281,7 @@ class _ApplicationTile extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final job = alert.job;
+    final color = _statusColor(status);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -239,21 +300,21 @@ class _ApplicationTile extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           child: Row(
             children: [
-              // Company avatar
+              // Company avatar — tinted to match current status
               Container(
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: AppColors.success.withValues(alpha: 0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Center(
                   child: Text(
                     job.company.name[0],
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w800,
-                      color: AppColors.success,
+                      color: color,
                     ),
                   ),
                 ),
@@ -267,9 +328,8 @@ class _ApplicationTile extends StatelessWidget {
                   children: [
                     Text(
                       job.title,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                      style: theme.textTheme.bodyLarge
+                          ?.copyWith(fontWeight: FontWeight.w600),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -283,26 +343,25 @@ class _ApplicationTile extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    // Status chip
+                    // Dynamic status chip
                     Container(
                       padding: const EdgeInsets.symmetric(
                           horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
-                        color: AppColors.success.withValues(alpha: 0.1),
+                        color: color.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const Icon(Icons.check_circle,
-                              size: 11, color: AppColors.success),
+                          Icon(_statusIcon(status), size: 11, color: color),
                           const SizedBox(width: 4),
-                          const Text(
-                            'Applied',
+                          Text(
+                            status,
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w600,
-                              color: AppColors.success,
+                              color: color,
                             ),
                           ),
                         ],
@@ -312,7 +371,7 @@ class _ApplicationTile extends StatelessWidget {
                 ),
               ),
 
-              // Applied date
+              // Applied date + menu hint
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [

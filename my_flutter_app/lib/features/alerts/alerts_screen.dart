@@ -105,6 +105,12 @@ class _AlertsScreenState extends State<AlertsScreen> {
   Future<void> _markRead(String alertId) async {
     await _api.markAlertRead(alertId);
     if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Marked as read'),
+        duration: Duration(seconds: 1),
+      ),
+    );
     _loadAlerts();
     context.read<AlertsProvider>().refresh();
   }
@@ -112,6 +118,14 @@ class _AlertsScreenState extends State<AlertsScreen> {
   Future<void> _toggleSaved(String alertId) async {
     await _api.toggleAlertSaved(alertId);
     if (!mounted) return;
+    final isSaved = _api.isJobSaved(
+        _alerts.firstWhere((a) => a.id == alertId).job.id);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(isSaved ? 'Job saved' : 'Removed from saved'),
+        duration: const Duration(seconds: 1),
+      ),
+    );
     _loadAlerts();
     context.read<AlertsProvider>().refresh();
   }
@@ -543,6 +557,6 @@ class _AlertItem extends StatelessWidget {
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
     if (diff.inHours < 24) return '${diff.inHours}h ago';
     if (diff.inDays < 7) return '${diff.inDays}d ago';
-    return '${(diff.inDays / 7).floor()}w ago';
+    return '${(diff.inDays / 7).floor()}wk ago';
   }
 }
