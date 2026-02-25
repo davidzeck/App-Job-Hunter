@@ -236,4 +236,50 @@ class MockApiService extends ApiServiceBase {
     await _withDelay(null);
     mockUserSkills.remove(skill);
   }
+
+  // ─── CV Management ─────────────────────────────────
+
+  // In-memory list of mock CVs
+  final List<CVResponse> _mockCvs = [];
+
+  @override
+  Future<CVResponse> uploadCv(
+    List<int> bytes,
+    String filename, {
+    void Function(double progress)? onProgress,
+  }) async {
+    // Simulate upload progress
+    for (var i = 1; i <= 5; i++) {
+      await Future.delayed(const Duration(milliseconds: 150));
+      onProgress?.call(i / 5);
+    }
+    final cv = CVResponse(
+      id: 'mock-cv-${_mockCvs.length + 1}',
+      filename: filename,
+      fileSizeBytes: bytes.length,
+      fileHash: 'mock-sha256-hash',
+      uploadStatus: 'ready',
+      skillsExtracted: 12,
+      isActive: true,
+      createdAt: DateTime.now(),
+      processedAt: DateTime.now(),
+    );
+    _mockCvs.add(cv);
+    // Flip hasCv on the mock user
+    mockUser.preferences['has_cv'] = true;
+    return cv;
+  }
+
+  @override
+  Future<List<CVResponse>> listCvs() => _withDelay(List.from(_mockCvs));
+
+  @override
+  Future<String> getCvDownloadUrl(String cvId) =>
+      _withDelay('https://mock-s3.example.com/cv/$cvId/resume.pdf');
+
+  @override
+  Future<void> deleteCv(String cvId) async {
+    await _withDelay(null);
+    _mockCvs.removeWhere((cv) => cv.id == cvId);
+  }
 }

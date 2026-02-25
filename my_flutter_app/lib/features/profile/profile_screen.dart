@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
@@ -21,6 +22,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   List<AlertResponse> _savedAlerts = [];
   List<AlertResponse> _appliedAlerts = [];
   bool _loading = true;
+
+  // CV upload state
+  bool _isUploading = false;
+  double _uploadProgress = 0;
 
   @override
   void initState() {
@@ -149,9 +154,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         // ─── Account Actions ───────────────
                         _SectionHeader('Account'),
                         const SizedBox(height: 8),
-                        _AccountCard(isDark: isDark)
-                            .animate()
-                            .fadeIn(delay: 300.ms, duration: 400.ms),
+                        _AccountCard(
+                          isDark: isDark,
+                          onUploadCv: _uploadCv,
+                          isUploading: _isUploading,
+                          uploadProgress: _uploadProgress,
+                        ).animate().fadeIn(delay: 300.ms, duration: 400.ms),
 
                         const SizedBox(height: 32),
 
@@ -178,6 +186,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
     await _api.updatePreferences({'notifications': notifs});
     // Force local refresh for toggle
     setState(() {});
+  }
+
+  Future<void> _uploadCv() async {
+    // Open file picker — PDF only
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf'],
+      withData: true,
+    );
+    if (result == null || result.files.isEmpty) return;
+
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null) return;
+
+    // Client-side size guard (5 MB)
+    const maxBytes = 5 * 1024 * 1024;
+    if (bytes.length > maxBytes) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('File too large. Maximum size is 5 MB.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _isUploading = true;
+      _uploadProgress = 0;
+    });
+
+    try {
+      await _api.uploadCv(
+        bytes,
+        file.name,
+        onProgress: (p) => setState(() => _uploadProgress = p),
+      );
+
+      // Refresh user profile so hasCv flips to true in the stats row
+      final updatedUser = await _api.getCurrentUser();
+      if (mounted) {
+        setState(() {
+          _user = updatedUser;
+          _isUploading = false;
+          _uploadProgress = 0;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('CV uploaded successfully!'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isUploading = false;
+          _uploadProgress = 0;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
 
@@ -675,7 +753,16 @@ class _NotificationsCard extends StatelessWidget {
 
 class _AccountCard extends StatelessWidget {
   final bool isDark;
-  const _AccountCard({required this.isDark});
+  final VoidCallback onUploadCv;
+  final bool isUploading;
+  final double uploadProgress;
+
+  const _AccountCard({
+    required this.isDark,
+    required this.onUploadCv,
+    required this.isUploading,
+    required this.uploadProgress,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -683,12 +770,14 @@ class _AccountCard extends StatelessWidget {
       child: Column(
         children: [
           ListTile(
-            enabled: false,
+            onTap: isUploading ? null : onUploadCv,
             leading: Icon(
               Icons.upload_file_outlined,
-              color: isDark
-                  ? AppColors.mutedForegroundDark
-                  : AppColors.mutedForegroundLight,
+              color: isUploading
+                  ? AppColors.primaryBlue
+                  : (isDark
+                      ? AppColors.mutedForegroundDark
+                      : AppColors.mutedForegroundLight),
             ),
             title: Text(
               'Upload CV',
@@ -697,22 +786,18 @@ class _AccountCard extends StatelessWidget {
                   .bodyLarge
                   ?.copyWith(fontWeight: FontWeight.w600),
             ),
-            trailing: Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: AppColors.mutedLight,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: const Text(
-                'Soon',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.mutedForegroundLight,
-                ),
-              ),
-            ),
+            subtitle: isUploading
+                ? Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: LinearProgressIndicator(
+                      value: uploadProgress > 0 ? uploadProgress : null,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  )
+                : null,
+            trailing: isUploading
+                ? null
+                : const Icon(Icons.chevron_right, size: 18),
           ),
           const Divider(height: 1, indent: 56),
           ListTile(

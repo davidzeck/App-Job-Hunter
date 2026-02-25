@@ -75,4 +75,24 @@ abstract class ApiServiceBase {
   Future<void> addUserSkill(String skill);
 
   Future<void> removeUserSkill(String skill);
+
+  // ─── CV Management ─────────────────────────────────
+
+  /// 3-step upload: presign → S3 → confirm.
+  /// Accepts the raw file bytes + original filename.
+  /// [onProgress] is called with values from 0.0 to 1.0 during the S3 upload.
+  Future<CVResponse> uploadCv(
+    List<int> bytes,
+    String filename, {
+    void Function(double progress)? onProgress,
+  });
+
+  /// List all active CVs for the current user.
+  Future<List<CVResponse>> listCvs();
+
+  /// Get a time-limited presigned download URL for a CV.
+  Future<String> getCvDownloadUrl(String cvId);
+
+  /// Soft-delete a CV and remove it from S3.
+  Future<void> deleteCv(String cvId);
 }

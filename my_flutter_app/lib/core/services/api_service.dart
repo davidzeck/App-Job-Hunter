@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:job_scout/core/models/models.dart';
 import 'package:job_scout/core/services/api_client.dart';
@@ -98,8 +101,10 @@ class ApiService extends ApiServiceBase {
       final res = await _dio.get<Map<String, dynamic>>(
         '/jobs',
         queryParameters: {
+          // Backend expects repeated ?company= params (FastAPI List[str]).
+          // Dio serializes a List value as repeated query params automatically.
           if (companySlugs != null && companySlugs.isNotEmpty)
-            'company_slugs': companySlugs.join(','),
+            'company': companySlugs,
           if (location != null) 'location': location,
           if (role != null && role.isNotEmpty) 'role': role,
           if (locationType != null && locationType.isNotEmpty)
@@ -297,6 +302,102 @@ class ApiService extends ApiServiceBase {
   Future<void> removeUserSkill(String skill) async {
     try {
       await _dio.delete<void>('/users/me/skills/$skill');
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  // ─── CV Management ─────────────────────────────────
+
+  @override
+  Future<CVResponse> uploadCv(
+    List<int> bytes,
+    String filename, {
+    void Function(double progress)? onProgress,
+  }) async {
+    try {
+      // Compute SHA-256 hash of the file bytes (used for deduplication)
+      final digest = sha256.convert(bytes);
+      final fileHash = digest.toString();
+
+      // ── Step 1: Request presigned POST URL from our API ──────────────────
+      final presignRes = await _dio.post<Map<String, dynamic>>(
+        '/users/me/cv/presign',
+        data: {
+          'filename': filename,
+          'file_size_bytes': bytes.length,
+          'file_hash': fileHash,
+        },
+      );
+      final presign = CVPresignResponse.fromJson(presignRes.data!);
+
+      // ── Step 2: Upload directly to S3 (not through our API) ─────────────
+      // S3 presigned POST requires all policy fields BEFORE the file field.
+      final s3Form = FormData();
+      presign.fields.forEach((key, value) {
+        s3Form.fields.add(MapEntry(key, value.toString()));
+      });
+      s3Form.files.add(MapEntry(
+        'file',
+        MultipartFile.fromBytes(
+          bytes,
+          filename: filename,
+          contentType: DioMediaType('application', 'pdf'),
+        ),
+      ));
+
+      // Use a plain Dio instance — S3 does not accept our JWT Authorization header.
+      final s3Dio = Dio();
+      await s3Dio.post<void>(
+        presign.uploadUrl,
+        data: s3Form,
+        onSendProgress: (sent, total) {
+          if (total > 0) onProgress?.call(sent / total);
+        },
+        options: Options(
+          // S3 presigned POST returns 204 on success — treat as success.
+          validateStatus: (status) => status != null && status < 400,
+        ),
+      );
+
+      // ── Step 3: Confirm with our API to trigger Celery processing ────────
+      final confirmRes = await _dio.post<Map<String, dynamic>>(
+        '/users/me/cv/${presign.cvId}/confirm',
+        data: {'file_hash': fileHash},
+      );
+      return CVResponse.fromJson(confirmRes.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<List<CVResponse>> listCvs() async {
+    try {
+      final res = await _dio.get<List<dynamic>>('/users/me/cv');
+      return (res.data!)
+          .map((c) => CVResponse.fromJson(c as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<String> getCvDownloadUrl(String cvId) async {
+    try {
+      final res = await _dio
+          .get<Map<String, dynamic>>('/users/me/cv/$cvId/download-url');
+      return res.data!['download_url'] as String;
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<void> deleteCv(String cvId) async {
+    try {
+      await _dio.delete<void>('/users/me/cv/$cvId');
     } on DioException catch (e) {
       throw Exception(_message(e));
     }

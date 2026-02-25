@@ -365,3 +365,75 @@ class PaginatedResponse<T> {
     required this.pages,
   });
 }
+
+// ─── CV Models ─────────────────────────────────────────────────
+
+/// Matches the backend CVPresignResponse schema.
+/// Returned by POST /users/me/cv/presign — client uses upload_url + fields
+/// to POST the file directly to S3 (never through the API server).
+class CVPresignResponse {
+  final String cvId;
+  final String uploadUrl;
+  final Map<String, dynamic> fields;
+  final DateTime expiresAt;
+
+  const CVPresignResponse({
+    required this.cvId,
+    required this.uploadUrl,
+    required this.fields,
+    required this.expiresAt,
+  });
+
+  factory CVPresignResponse.fromJson(Map<String, dynamic> json) =>
+      CVPresignResponse(
+        cvId: json['cv_id'] as String,
+        uploadUrl: json['upload_url'] as String,
+        fields: Map<String, dynamic>.from(json['fields'] as Map),
+        expiresAt: DateTime.parse(json['expires_at'] as String),
+      );
+}
+
+/// Matches the backend CVResponse schema.
+/// upload_status: pending_upload | uploaded | processing | ready | failed
+class CVResponse {
+  final String id;
+  final String filename;
+  final int? fileSizeBytes;
+  final String? fileHash;
+  final String uploadStatus;
+  final int skillsExtracted;
+  final bool isActive;
+  final DateTime createdAt;
+  final DateTime? processedAt;
+
+  const CVResponse({
+    required this.id,
+    required this.filename,
+    this.fileSizeBytes,
+    this.fileHash,
+    required this.uploadStatus,
+    this.skillsExtracted = 0,
+    this.isActive = true,
+    required this.createdAt,
+    this.processedAt,
+  });
+
+  bool get isReady => uploadStatus == 'ready';
+  bool get isProcessing =>
+      uploadStatus == 'processing' || uploadStatus == 'uploaded';
+  bool get isFailed => uploadStatus == 'failed';
+
+  factory CVResponse.fromJson(Map<String, dynamic> json) => CVResponse(
+        id: json['id'] as String,
+        filename: json['filename'] as String,
+        fileSizeBytes: json['file_size_bytes'] as int?,
+        fileHash: json['file_hash'] as String?,
+        uploadStatus: json['upload_status'] as String? ?? 'unknown',
+        skillsExtracted: json['skills_extracted'] as int? ?? 0,
+        isActive: json['is_active'] as bool? ?? true,
+        createdAt: DateTime.parse(json['created_at'] as String),
+        processedAt: json['processed_at'] != null
+            ? DateTime.parse(json['processed_at'] as String)
+            : null,
+      );
+}
