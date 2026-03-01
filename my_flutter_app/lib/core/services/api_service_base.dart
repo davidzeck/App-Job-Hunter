@@ -18,6 +18,10 @@ abstract class ApiServiceBase {
     String fullName,
   );
 
+  /// Best-effort server-side logout: revokes the refresh-token session and
+  /// denylists the current access token. Must never throw.
+  Future<void> logout(String? refreshToken);
+
   Future<UserProfileResponse> getCurrentUser();
 
   // ─── Jobs ──────────────────────────────────────────
@@ -95,4 +99,15 @@ abstract class ApiServiceBase {
 
   /// Soft-delete a CV and remove it from S3.
   Future<void> deleteCv(String cvId);
+
+  // ─── AI / ATS ───────────────────────────────────────────
+
+  /// Analyze a CV against a job. Returns cached result or task_id for polling.
+  Future<CVTaskStatusResponse> analyzeCv(String cvId, String jobId);
+
+  /// Tailor a CV for a specific job. Always async — returns task_id for polling.
+  Future<CVTaskStatusResponse> tailorCv(String cvId, String jobId);
+
+  /// Poll a Celery task by ID.
+  Future<CVTaskStatusResponse> getCvTaskStatus(String taskId);
 }

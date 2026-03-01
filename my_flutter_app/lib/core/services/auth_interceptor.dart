@@ -58,7 +58,16 @@ class AuthInterceptor extends Interceptor {
       final newAccess = response.data?['access_token'] as String?;
       if (newAccess == null) throw Exception('No access_token in refresh response');
 
-      await _storage.updateAccessToken(newAccess);
+      // Refresh tokens ROTATE: the backend invalidates the old one and
+      // returns a new pair. Storing only the access token would make the
+      // next refresh present a replaced token and kill the whole session
+      // (reuse detection).
+      final newRefresh = response.data?['refresh_token'] as String?;
+      if (newRefresh != null && newRefresh.isNotEmpty) {
+        await _storage.save(accessToken: newAccess, refreshToken: newRefresh);
+      } else {
+        await _storage.updateAccessToken(newAccess);
+      }
 
       // Retry the original request with the new token
       final opts = err.requestOptions;

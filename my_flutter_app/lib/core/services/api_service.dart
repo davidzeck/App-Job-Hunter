@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:job_scout/core/models/models.dart';
@@ -72,6 +70,18 @@ class ApiService extends ApiServiceBase {
       return TokenResponse.fromJson(res.data!);
     } on DioException catch (e) {
       throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<void> logout(String? refreshToken) async {
+    try {
+      await _dio.post<Map<String, dynamic>>(
+        '/auth/logout',
+        data: {'refresh_token': refreshToken},
+      );
+    } catch (_) {
+      // Best-effort: local token clearing proceeds regardless
     }
   }
 
@@ -398,6 +408,45 @@ class ApiService extends ApiServiceBase {
   Future<void> deleteCv(String cvId) async {
     try {
       await _dio.delete<void>('/users/me/cv/$cvId');
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  // ─── AI / ATS ───────────────────────────────────────────
+
+  @override
+  Future<CVTaskStatusResponse> analyzeCv(String cvId, String jobId) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/users/me/cv/$cvId/analyze',
+        data: {'job_id': jobId},
+      );
+      return CVTaskStatusResponse.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<CVTaskStatusResponse> tailorCv(String cvId, String jobId) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/users/me/cv/$cvId/tailor',
+        data: {'job_id': jobId},
+      );
+      return CVTaskStatusResponse.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<CVTaskStatusResponse> getCvTaskStatus(String taskId) async {
+    try {
+      final res = await _dio
+          .get<Map<String, dynamic>>('/users/me/cv/tasks/$taskId');
+      return CVTaskStatusResponse.fromJson(res.data!);
     } on DioException catch (e) {
       throw Exception(_message(e));
     }

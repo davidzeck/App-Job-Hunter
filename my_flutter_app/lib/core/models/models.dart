@@ -437,3 +437,112 @@ class CVResponse {
             : null,
       );
 }
+
+// ─── AI/ATS Models ────────────────────────────────────────────
+
+/// Matches the backend CVTaskStatusResponse schema.
+/// Used for polling async Celery tasks (analyze / tailor).
+class CVTaskStatusResponse {
+  final String taskId;
+  final String status; // pending | started | success | failure
+  final Map<String, dynamic>? result;
+  final String? error;
+
+  const CVTaskStatusResponse({
+    required this.taskId,
+    required this.status,
+    this.result,
+    this.error,
+  });
+
+  bool get isPending => status == 'pending';
+  bool get isStarted => status == 'started';
+  bool get isSuccess => status == 'success';
+  bool get isFailure => status == 'failure';
+  bool get isTerminal => isSuccess || isFailure;
+
+  factory CVTaskStatusResponse.fromJson(Map<String, dynamic> json) =>
+      CVTaskStatusResponse(
+        taskId: json['task_id'] as String,
+        status: json['status'] as String,
+        result: json['result'] as Map<String, dynamic>?,
+        error: json['error'] as String?,
+      );
+}
+
+/// Matches the backend CVAnalysisResponse schema.
+/// match_score is 0.0–1.0 from the backend; [matchPercent] converts to 0–100.
+class CVAnalysisResult {
+  final String cvId;
+  final String jobId;
+  final double matchScore;
+  final List<String> presentKeywords;
+  final List<String> missingKeywords;
+  final List<String> suggestedAdditions;
+  final bool cached;
+  final DateTime analyzedAt;
+
+  const CVAnalysisResult({
+    required this.cvId,
+    required this.jobId,
+    required this.matchScore,
+    this.presentKeywords = const [],
+    this.missingKeywords = const [],
+    this.suggestedAdditions = const [],
+    this.cached = false,
+    required this.analyzedAt,
+  });
+
+  double get matchPercent => (matchScore * 100).clamp(0, 100);
+
+  factory CVAnalysisResult.fromJson(Map<String, dynamic> json) =>
+      CVAnalysisResult(
+        cvId: json['cv_id'] as String,
+        jobId: json['job_id'] as String,
+        matchScore: (json['match_score'] as num).toDouble(),
+        presentKeywords: (json['present_keywords'] as List<dynamic>?)
+                ?.cast<String>() ??
+            [],
+        missingKeywords: (json['missing_keywords'] as List<dynamic>?)
+                ?.cast<String>() ??
+            [],
+        suggestedAdditions: (json['suggested_additions'] as List<dynamic>?)
+                ?.cast<String>() ??
+            [],
+        cached: json['cached'] as bool? ?? false,
+        analyzedAt: DateTime.parse(json['analyzed_at'] as String),
+      );
+}
+
+/// Matches the backend CVTailorResponse schema.
+class CVTailorResult {
+  final String cvId;
+  final String jobId;
+  final String tailoredSummary;
+  final List<String> tailoredSkills;
+  final List<String> keywordsAdded;
+  final String originalSummary;
+
+  const CVTailorResult({
+    required this.cvId,
+    required this.jobId,
+    required this.tailoredSummary,
+    this.tailoredSkills = const [],
+    this.keywordsAdded = const [],
+    required this.originalSummary,
+  });
+
+  factory CVTailorResult.fromJson(Map<String, dynamic> json) =>
+      CVTailorResult(
+        cvId: json['cv_id'] as String,
+        jobId: json['job_id'] as String,
+        tailoredSummary: json['tailored_summary'] as String,
+        tailoredSkills: (json['tailored_skills'] as List<dynamic>?)
+                ?.cast<String>() ??
+            [],
+        keywordsAdded: (json['keywords_added'] as List<dynamic>?)
+                ?.cast<String>() ??
+            [],
+        originalSummary: json['original_summary'] as String,
+      );
+}

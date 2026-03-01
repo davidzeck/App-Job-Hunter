@@ -82,6 +82,9 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<void> logout() async {
+    // Revoke the session server-side (best-effort) BEFORE clearing tokens —
+    // the request needs the access token, and logout() never throws.
+    await api.logout(_storage.refreshToken);
     await _storage.clear();
     _user = null;
     _error = null;

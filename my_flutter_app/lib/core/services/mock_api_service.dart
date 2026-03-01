@@ -48,6 +48,11 @@ class MockApiService extends ApiServiceBase {
   }
 
   @override
+  Future<void> logout(String? refreshToken) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+  }
+
+  @override
   Future<UserProfileResponse> getCurrentUser() {
     return _withDelay(mockUser);
   }
@@ -281,5 +286,62 @@ class MockApiService extends ApiServiceBase {
   Future<void> deleteCv(String cvId) async {
     await _withDelay(null);
     _mockCvs.removeWhere((cv) => cv.id == cvId);
+  }
+
+  // ─── AI / ATS ───────────────────────────────────────────
+
+  @override
+  Future<CVTaskStatusResponse> analyzeCv(String cvId, String jobId) async {
+    await Future.delayed(const Duration(milliseconds: 600));
+    return CVTaskStatusResponse(
+      taskId: 'mock-cached',
+      status: 'success',
+      result: {
+        'cv_id': cvId,
+        'job_id': jobId,
+        'match_score': 0.74,
+        'present_keywords': ['Python', 'FastAPI', 'PostgreSQL', 'Docker', 'REST APIs'],
+        'missing_keywords': ['Kubernetes', 'Terraform', 'GraphQL'],
+        'suggested_additions': [
+          'Add Kubernetes experience from personal projects',
+          'Mention CI/CD pipeline work with GitHub Actions',
+        ],
+        'cached': true,
+        'analyzed_at': DateTime.now().toIso8601String(),
+      },
+    );
+  }
+
+  @override
+  Future<CVTaskStatusResponse> tailorCv(String cvId, String jobId) async {
+    await Future.delayed(const Duration(milliseconds: 800));
+    return CVTaskStatusResponse(
+      taskId: 'mock-tailor',
+      status: 'success',
+      result: {
+        'cv_id': cvId,
+        'job_id': jobId,
+        'tailored_summary':
+            'Senior software engineer with 5+ years building scalable backend '
+            'systems using Python, FastAPI, and PostgreSQL. Experienced in '
+            'containerized deployments with Docker and Kubernetes.',
+        'tailored_skills': [
+          'Python', 'FastAPI', 'PostgreSQL', 'Docker',
+          'Kubernetes', 'REST APIs', 'CI/CD',
+        ],
+        'keywords_added': ['Kubernetes', 'CI/CD'],
+        'original_summary':
+            'Software engineer with experience in Python and web development.',
+      },
+    );
+  }
+
+  @override
+  Future<CVTaskStatusResponse> getCvTaskStatus(String taskId) async {
+    return _withDelay(CVTaskStatusResponse(
+      taskId: taskId,
+      status: 'success',
+      result: {},
+    ));
   }
 }

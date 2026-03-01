@@ -24,6 +24,16 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   bool _isSaved = false;
   bool _isSaving = false;
 
+  // AI/ATS state
+  List<CVResponse> _userCvs = [];
+  CVAnalysisResult? _analysisResult;
+  CVTailorResult? _tailorResult;
+  bool _isAnalyzing = false;
+  bool _isTailoring = false;
+  String? _analysisError;
+  String? _tailorError;
+  bool _analysisExpanded = false;
+
   @override
   void initState() {
     super.initState();
@@ -34,12 +44,158 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
     final job = await _api.getJobDetail(widget.jobId);
     final gap = await _api.getSkillGap(widget.jobId);
     final saved = _api.isJobSaved(widget.jobId);
+    List<CVResponse> cvs = [];
+    try {
+      cvs = await _api.listCvs();
+    } catch (_) {
+      // User may not have CVs — that's fine
+    }
     setState(() {
       _job = job;
       _skillGap = gap;
       _isSaved = saved;
+      _userCvs = cvs;
       _loading = false;
     });
+  }
+
+  /// Find the first ready CV, or null.
+  CVResponse? get _readyCv {
+    try {
+      return _userCvs.firstWhere((cv) => cv.isReady);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _startAnalysis() async {
+    final cv = _readyCv;
+    if (cv == null) return;
+    setState(() {
+      _isAnalyzing = true;
+      _analysisError = null;
+      _analysisResult = null;
+    });
+
+    try {
+      final res = await _api.analyzeCv(cv.id, widget.jobId);
+      if (res.isSuccess && res.result != null) {
+        if (mounted) {
+          setState(() {
+            _analysisResult = CVAnalysisResult.fromJson(res.result!);
+            _isAnalyzing = false;
+            _analysisExpanded = true;
+          });
+        }
+      } else if (!res.isTerminal) {
+        await _pollTask(res.taskId, isAnalysis: true);
+      } else {
+        if (mounted) {
+          setState(() {
+            _analysisError = res.error ?? 'Analysis failed';
+            _isAnalyzing = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _analysisError = e.toString();
+          _isAnalyzing = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _startTailor() async {
+    final cv = _readyCv;
+    if (cv == null) return;
+    setState(() {
+      _isTailoring = true;
+      _tailorError = null;
+      _tailorResult = null;
+    });
+
+    try {
+      final res = await _api.tailorCv(cv.id, widget.jobId);
+      if (res.isSuccess && res.result != null) {
+        if (mounted) {
+          setState(() {
+            _tailorResult = CVTailorResult.fromJson(res.result!);
+            _isTailoring = false;
+          });
+        }
+      } else if (!res.isTerminal) {
+        await _pollTask(res.taskId, isAnalysis: false);
+      } else {
+        if (mounted) {
+          setState(() {
+            _tailorError = res.error ?? 'Tailoring failed';
+            _isTailoring = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _tailorError = e.toString();
+          _isTailoring = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _pollTask(String taskId, {required bool isAnalysis}) async {
+    const maxAttempts = 30; // 30 × 2s = 60s timeout
+    for (var i = 0; i < maxAttempts; i++) {
+      await Future.delayed(const Duration(seconds: 2));
+      if (!mounted) return;
+
+      try {
+        final status = await _api.getCvTaskStatus(taskId);
+        if (status.isSuccess && status.result != null) {
+          if (!mounted) return;
+          setState(() {
+            if (isAnalysis) {
+              _analysisResult = CVAnalysisResult.fromJson(status.result!);
+              _isAnalyzing = false;
+              _analysisExpanded = true;
+            } else {
+              _tailorResult = CVTailorResult.fromJson(status.result!);
+              _isTailoring = false;
+            }
+          });
+          return;
+        } else if (status.isFailure) {
+          if (!mounted) return;
+          setState(() {
+            if (isAnalysis) {
+              _analysisError = status.error ?? 'Analysis failed';
+              _isAnalyzing = false;
+            } else {
+              _tailorError = status.error ?? 'Tailoring failed';
+              _isTailoring = false;
+            }
+          });
+          return;
+        }
+      } catch (_) {
+        // Continue polling on transient errors
+      }
+    }
+
+    // Timeout
+    if (mounted) {
+      setState(() {
+        if (isAnalysis) {
+          _analysisError = 'Analysis timed out. Try again.';
+          _isAnalyzing = false;
+        } else {
+          _tailorError = 'Tailoring timed out. Try again.';
+          _isTailoring = false;
+        }
+      });
+    }
   }
 
   Future<void> _toggleSave() async {
@@ -272,6 +428,27 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
                   .animate()
                   .fadeIn(delay: 500.ms, duration: 400.ms),
             ),
+
+          // ─── AI CV Analysis ───────────────────────
+          SliverToBoxAdapter(
+            child: _CVAnalysisSection(
+              readyCv: _readyCv,
+              analysisResult: _analysisResult,
+              tailorResult: _tailorResult,
+              isAnalyzing: _isAnalyzing,
+              isTailoring: _isTailoring,
+              analysisError: _analysisError,
+              tailorError: _tailorError,
+              expanded: _analysisExpanded,
+              onAnalyze: _startAnalysis,
+              onTailor: _startTailor,
+              onToggle: () {
+                setState(() => _analysisExpanded = !_analysisExpanded);
+              },
+            )
+                .animate()
+                .fadeIn(delay: 600.ms, duration: 400.ms),
+          ),
 
           // Bottom padding for the action bar
           const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
@@ -645,6 +822,373 @@ class _SkillRow extends StatelessWidget {
               ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── AI CV Analysis Section ──────────────────────────────────
+
+class _CVAnalysisSection extends StatelessWidget {
+  final CVResponse? readyCv;
+  final CVAnalysisResult? analysisResult;
+  final CVTailorResult? tailorResult;
+  final bool isAnalyzing;
+  final bool isTailoring;
+  final String? analysisError;
+  final String? tailorError;
+  final bool expanded;
+  final VoidCallback onAnalyze;
+  final VoidCallback onTailor;
+  final VoidCallback onToggle;
+
+  const _CVAnalysisSection({
+    required this.readyCv,
+    this.analysisResult,
+    this.tailorResult,
+    required this.isAnalyzing,
+    required this.isTailoring,
+    this.analysisError,
+    this.tailorError,
+    required this.expanded,
+    required this.onAnalyze,
+    required this.onTailor,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // No CV available — show info tile
+    if (readyCv == null) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+        child: Card(
+          color: AppColors.primaryBlue.withValues(alpha: 0.06),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Icon(Icons.auto_awesome, color: AppColors.primaryBlue, size: 22),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Upload a CV in the web dashboard to unlock AI analysis.',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: isDark
+                          ? AppColors.mutedForegroundDark
+                          : AppColors.mutedForegroundLight,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final hasResult = analysisResult != null;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+      child: Card(
+        child: Column(
+          children: [
+            // Header
+            InkWell(
+              borderRadius: BorderRadius.circular(12),
+              onTap: hasResult ? onToggle : null,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  children: [
+                    // Score or icon
+                    if (hasResult) ...[
+                      _MatchScoreCircle(
+                        percent: analysisResult!.matchPercent,
+                      ),
+                    ] else ...[
+                      Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          color: AppColors.primaryBlue.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(26),
+                        ),
+                        child: Icon(
+                          Icons.auto_awesome,
+                          color: AppColors.primaryBlue,
+                          size: 24,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'AI CV Analysis',
+                            style: theme.textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          if (isAnalyzing)
+                            Text(
+                              'Analyzing your CV against this job...',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: AppColors.primaryBlue,
+                              ),
+                            )
+                          else if (analysisError != null)
+                            Text(
+                              analysisError!,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: AppColors.destructive,
+                              ),
+                            )
+                          else if (hasResult)
+                            Text(
+                              analysisResult!.cached
+                                  ? 'Cached result'
+                                  : 'Fresh analysis',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: isDark
+                                    ? AppColors.mutedForegroundDark
+                                    : AppColors.mutedForegroundLight,
+                              ),
+                            )
+                          else
+                            Text(
+                              'See how your CV matches this role',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: isDark
+                                    ? AppColors.mutedForegroundDark
+                                    : AppColors.mutedForegroundLight,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (isAnalyzing)
+                      const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    else if (!hasResult)
+                      FilledButton.tonal(
+                        onPressed: onAnalyze,
+                        child: const Text('Analyze'),
+                      )
+                    else
+                      Icon(expanded ? Icons.expand_less : Icons.expand_more),
+                  ],
+                ),
+              ),
+            ),
+
+            // Expanded analysis details
+            if (expanded && hasResult) ...[
+              const Divider(height: 1),
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Present keywords
+                    if (analysisResult!.presentKeywords.isNotEmpty) ...[
+                      _SkillGroupHeader('Present Keywords', Icons.check_circle, AppColors.success),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: analysisResult!.presentKeywords
+                            .map((k) => _KeywordChip(k, AppColors.success))
+                            .toList(),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Missing keywords
+                    if (analysisResult!.missingKeywords.isNotEmpty) ...[
+                      _SkillGroupHeader('Missing Keywords', Icons.cancel, AppColors.destructive),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: analysisResult!.missingKeywords
+                            .map((k) => _KeywordChip(k, AppColors.destructive))
+                            .toList(),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Suggested additions
+                    if (analysisResult!.suggestedAdditions.isNotEmpty) ...[
+                      _SkillGroupHeader('Suggestions', Icons.lightbulb_outline, AppColors.warning),
+                      const SizedBox(height: 8),
+                      ...analysisResult!.suggestedAdditions.map(
+                        (s) => Padding(
+                          padding: const EdgeInsets.only(bottom: 4, left: 22),
+                          child: Text(
+                            s,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: isDark
+                                  ? AppColors.foregroundDark.withValues(alpha: 0.8)
+                                  : AppColors.foregroundLight.withValues(alpha: 0.8),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+
+                    // Tailor button / result
+                    if (tailorResult != null) ...[
+                      const Divider(),
+                      const SizedBox(height: 12),
+                      Text(
+                        'Tailored Summary',
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.success.withValues(alpha: 0.06),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: AppColors.success.withValues(alpha: 0.2),
+                          ),
+                        ),
+                        child: Text(
+                          tailorResult!.tailoredSummary,
+                          style: theme.textTheme.bodySmall?.copyWith(height: 1.5),
+                        ),
+                      ),
+                      if (tailorResult!.keywordsAdded.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          'Keywords Added',
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.success,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: tailorResult!.keywordsAdded
+                              .map((k) => _KeywordChip(k, AppColors.success))
+                              .toList(),
+                        ),
+                      ],
+                    ] else ...[
+                      // Tailor button
+                      const Divider(),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: isTailoring
+                            ? const Center(
+                                child: Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2),
+                                  ),
+                                ),
+                              )
+                            : OutlinedButton.icon(
+                                onPressed: onTailor,
+                                icon: const Icon(Icons.auto_fix_high, size: 18),
+                                label: Text(
+                                  tailorError ?? 'Tailor CV for This Job',
+                                  style: TextStyle(
+                                    color: tailorError != null
+                                        ? AppColors.destructive
+                                        : null,
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _MatchScoreCircle extends StatelessWidget {
+  final double percent;
+
+  const _MatchScoreCircle({required this.percent});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = percent >= 75
+        ? AppColors.success
+        : (percent >= 50 ? AppColors.warning : AppColors.destructive);
+
+    return SizedBox(
+      width: 52,
+      height: 52,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          CircularProgressIndicator(
+            value: percent / 100,
+            strokeWidth: 5,
+            backgroundColor: color.withValues(alpha: 0.15),
+            color: color,
+          ),
+          Text(
+            '${percent.round()}%',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _KeywordChip extends StatelessWidget {
+  final String label;
+  final Color color;
+
+  const _KeywordChip(this.label, this.color);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: color),
       ),
     );
   }
