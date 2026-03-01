@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 import 'package:crypto/crypto.dart';
 import 'package:dio/dio.dart';
 import 'package:job_scout/core/models/models.dart';
