@@ -21,6 +21,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final _api = api;
   List<JobListItem> _recentJobs = [];
+  List<RecommendedJob> _recommended = [];
   bool _loading = true;
 
   @override
@@ -29,17 +30,25 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadData();
   }
 
-  /// Refreshes the jobs list and the alerts provider (stats + recent alerts)
-  /// in parallel so both complete before the spinner disappears.
+  /// Refreshes the jobs list, skill-matched recommendations, and the alerts
+  /// provider (stats + recent alerts) in parallel.
   Future<void> _loadData() async {
     setState(() => _loading = true);
     final jobsFuture = _api.getJobs(limit: 5, daysAgo: 30);
+    // Recommendations are optional garnish — a failure (e.g. no CV yet)
+    // must never break the home screen.
+    final recommendedFuture = _api
+        .getRecommendedJobs(limit: 10)
+        .then<List<RecommendedJob>>((r) => r.items)
+        .catchError((_) => <RecommendedJob>[]);
     final alertsFuture = context.read<AlertsProvider>().refresh();
     final result = await jobsFuture;
+    final recommended = await recommendedFuture;
     await alertsFuture;
     if (mounted) {
       setState(() {
         _recentJobs = result.items;
+        _recommended = recommended;
         _loading = false;
       });
     }
@@ -196,6 +205,30 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
+            // ─── Recommended for you (skill-matched; hidden when empty) ──
+            if (!_loading && _recommended.isNotEmpty) ...[
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+                  child: _SectionHeader(title: 'Recommended for you'),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 128,
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: _recommended.length,
+                    itemBuilder: (context, index) => _RecommendedJobCard(
+                      job: _recommended[index],
+                      animationIndex: index,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+
             // ─── Latest Jobs ─────────────────────────
             SliverToBoxAdapter(
               child: Padding(
@@ -347,6 +380,101 @@ class _MiniAlertCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Compact horizontal card for the "Recommended for you" carousel.
+class _RecommendedJobCard extends StatelessWidget {
+  final RecommendedJob job;
+  final int animationIndex;
+
+  const _RecommendedJobCard({required this.job, this.animationIndex = 0});
+
+  Color get _scoreColor {
+    if (job.matchScore >= 75) return AppColors.success;
+    if (job.matchScore >= 50) return AppColors.warning;
+    return AppColors.primaryBlue;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: SizedBox(
+        width: 240,
+        child: Card(
+          margin: EdgeInsets.zero,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => context.push('/jobs/${job.id}'),
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          job.title,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _scoreColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          '${job.matchScore.round()}%',
+                          style: theme.textTheme.labelSmall?.copyWith(
+                            color: _scoreColor,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${job.company.name} · ${job.location ?? 'Remote'}',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: isDark
+                          ? AppColors.mutedForegroundDark
+                          : AppColors.mutedForegroundLight,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const Spacer(),
+                  Text(
+                    job.matchedSkills.take(3).join(' · '),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: AppColors.primaryBlue,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ).animate().fadeIn(
+            delay: Duration(milliseconds: 50 * animationIndex),
+            duration: 200.ms,
+          ),
     );
   }
 }

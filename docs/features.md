@@ -19,7 +19,7 @@ Bottom `NavigationBar` hosting the 5 tabs, unread-alerts badge from `AlertsProvi
 
 | Screen | Route | What it does |
 |---|---|---|
-| Home — [`home/home_screen.dart`](../my_flutter_app/lib/features/home/home_screen.dart) | `/home` | Parallel load: recent jobs (`getJobs(limit:5, daysAgo:30)`) + `AlertsProvider.refresh()`. Stats grid (`stat_card`: total jobs, new today, unread, applied), recent alerts, recent job cards |
+| Home — [`home/home_screen.dart`](../my_flutter_app/lib/features/home/home_screen.dart) | `/home` | Parallel load: recent jobs (`getJobs(limit:5, daysAgo:30)`) + `getRecommendedJobs` + `AlertsProvider.refresh()`. Stats grid, recent alerts, **"Recommended for you" carousel** (match-% pill + matched skills; hidden when empty or errored — no CV yet), recent job cards |
 | Jobs — [`jobs/jobs_screen.dart`](../my_flutter_app/lib/features/jobs/jobs_screen.dart) | `/jobs` | Infinite-scroll paginated list (`job_card`), debounced search, location-type filter, days-ago selector (1/3/7/14/30). Reacts to `JobsFilterProvider` when arriving from Companies (page size 5, filter chip shown) |
 | Companies — [`companies/companies_screen.dart`](../my_flutter_app/lib/features/companies/companies_screen.dart) | `/companies` | `getCompanies()` list with client-side search; tap → `JobsFilterProvider.filterByCompany()` → navigate to Jobs |
 | Alerts — [`alerts/alerts_screen.dart`](../my_flutter_app/lib/features/alerts/alerts_screen.dart) | `/alerts` | Paginated alert feed (page size 4), unread-only toggle, mark-read, save toggle, mark-applied — optimistic updates on the mutable `AlertResponse` |
@@ -38,7 +38,7 @@ Bottom `NavigationBar` hosting the 5 tabs, unread-alerts badge from `AlertsProvi
 | Screen | ApiServiceBase calls |
 |---|---|
 | Splash/Login/Register | `login`, `register`, `getMe` (via AuthProvider) |
-| Home | `getJobs(limit:5, daysAgo:30)`; alerts via AlertsProvider (`getAlerts` ×3 parallel) |
+| Home | `getJobs(limit:5, daysAgo:30)`, `getRecommendedJobs(limit:10)`; alerts via AlertsProvider (`getAlerts` ×3 parallel) |
 | Jobs | `getJobs(page, limit, role, location, locationType, daysAgo, company)` |
 | Job Detail | `getJob`, `getSkillGap`, `getCvs`, `analyzeCv`, `tailorCv`, `getCvTaskStatus`, alert save/apply toggles |
 | Companies | `getCompanies` |

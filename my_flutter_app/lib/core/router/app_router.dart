@@ -14,7 +14,11 @@ import 'package:job_scout/features/profile/profile_screen.dart';
 import 'package:job_scout/features/profile/skills_screen.dart';
 import 'package:job_scout/features/profile/applied_screen.dart';
 
-GoRouter createRouter(AuthProvider authProvider) => GoRouter(
+/// Global router handle for navigation from outside the widget tree
+/// (notification taps in PushService). Set by [createRouter].
+GoRouter? appRouter;
+
+GoRouter createRouter(AuthProvider authProvider) => appRouter = GoRouter(
       initialLocation: '/splash',
       refreshListenable: authProvider,
       redirect: (context, state) {

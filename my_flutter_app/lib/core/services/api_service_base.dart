@@ -40,6 +40,13 @@ abstract class ApiServiceBase {
 
   Future<SkillGapResponse> getSkillGap(String jobId);
 
+  /// Jobs ranked by skill overlap with the user's CV skills.
+  /// Empty when the user has no extracted skills — callers hide the section.
+  Future<PaginatedResponse<RecommendedJob>> getRecommendedJobs({
+    int page = 1,
+    int limit = 10,
+  });
+
   // ─── Companies ─────────────────────────────────────
 
   Future<List<CompanyResponse>> getCompanies();
@@ -71,6 +78,10 @@ abstract class ApiServiceBase {
   // ─── Preferences ───────────────────────────────────
 
   Future<void> updatePreferences(Map<String, dynamic> prefs);
+
+  /// Register this device's FCM token so the backend can push job alerts.
+  /// Called after login and whenever Firebase rotates the token.
+  Future<void> updateFcmToken(String fcmToken);
 
   // ─── Skills ────────────────────────────────────────
 

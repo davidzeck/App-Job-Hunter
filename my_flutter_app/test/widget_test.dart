@@ -18,5 +18,9 @@ void main() {
     await tester.pump();
     // Splash screen shows app name
     expect(find.text('Job Scout'), findsOneWidget);
+
+    // Flush the splash screen's flutter_animate delayed fades (300/600/900ms)
+    // so no timers are pending when the test tears down.
+    await tester.pump(const Duration(seconds: 2));
   });
 }

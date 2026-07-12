@@ -26,6 +26,7 @@ my_flutter_app/
 │   │   │   ├── service_locator.dart       # `api` getter: demo ⇄ real switch (ONLY switch point)
 │   │   │   ├── api_client.dart            # shared Dio singleton + interceptor wiring
 │   │   │   ├── auth_interceptor.dart      # Bearer inject + silent 401 refresh/retry
+│   │   │   ├── push_service.dart          # FCM: init, token registration, tap deep-links
 │   │   │   └── token_storage.dart         # flutter_secure_storage + in-memory cache
 │   │   ├── theme/
 │   │   │   ├── app_theme.dart             # AppColors + Material 3 light/dark ThemeData (Inter)

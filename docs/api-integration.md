@@ -19,10 +19,11 @@ Singleton over the shared Dio from [`api_client.dart`](../my_flutter_app/lib/cor
 | Area | Calls |
 |---|---|
 | Auth | `POST /auth/login` ⚠️, `POST /auth/register`, `GET /users/me`, `POST /auth/refresh` (interceptor only) |
-| Jobs | `GET /jobs` (query: repeated `company`, `location`, `role`, `location_type`, `days_ago`, `page`, `limit`), `GET /jobs/{id}`, `GET /jobs/{id}/skill-gap` |
+| Jobs | `GET /jobs` (query: repeated `company`, `location`, `role`, `location_type`, `days_ago`, `page`, `limit`), `GET /jobs/recommended` (skill-matched feed), `GET /jobs/{id}`, `GET /jobs/{id}/skill-gap` |
 | Companies | `GET /companies` |
 | Alerts | `GET /alerts` (`unread_only`, `page`, `limit`), `PATCH /alerts/{id}/read`, `PATCH /alerts/{id}/saved`, `PATCH /alerts/{id}/applied` |
 | Preferences | `PUT /users/me/preferences` |
+| Push | `PUT /users/me/fcm-token` (via [`push_service.dart`](../my_flutter_app/lib/core/services/push_service.dart) after login + on token rotation) |
 | Skills | `GET /users/me/skills`, `POST /users/me/skills`, `DELETE /users/me/skills/{skill}` |
 | CV | `POST /users/me/cv/presign`, `POST /users/me/cv/{id}/confirm`, `GET /users/me/cv`, `GET /users/me/cv/{id}/download-url`, `DELETE /users/me/cv/{id}` |
 | AI/ATS | `POST /users/me/cv/{id}/analyze`, `POST /users/me/cv/{id}/tailor`, `GET /users/me/cv/tasks/{taskId}` |

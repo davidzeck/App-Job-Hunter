@@ -140,6 +140,31 @@ class ApiService extends ApiServiceBase {
   }
 
   @override
+  Future<PaginatedResponse<RecommendedJob>> getRecommendedJobs({
+    int page = 1,
+    int limit = 10,
+  }) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/jobs/recommended',
+        queryParameters: {'page': page, 'limit': limit},
+      );
+      final data = res.data!;
+      return PaginatedResponse<RecommendedJob>(
+        items: (data['items'] as List)
+            .map((j) => RecommendedJob.fromJson(j as Map<String, dynamic>))
+            .toList(),
+        total: data['total'] as int,
+        page: data['page'] as int,
+        limit: data['limit'] as int,
+        pages: data['pages'] as int,
+      );
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
   Future<JobDetail> getJobDetail(String jobId) async {
     try {
       final res =
@@ -282,6 +307,15 @@ class ApiService extends ApiServiceBase {
   Future<void> updatePreferences(Map<String, dynamic> prefs) async {
     try {
       await _dio.put<void>('/users/me/preferences', data: prefs);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<void> updateFcmToken(String fcmToken) async {
+    try {
+      await _dio.put<void>('/users/me/fcm-token', data: {'fcm_token': fcmToken});
     } on DioException catch (e) {
       throw Exception(_message(e));
     }

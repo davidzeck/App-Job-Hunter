@@ -41,7 +41,8 @@ The **only** switch between demo and real is the `API_URL` dart-define — see [
 - Screens live under [`lib/features/`](../my_flutter_app/lib/features/); shared infra under [`lib/core/`](../my_flutter_app/lib/core/).
 - Every screen talks to the API through the `api` getter from [`service_locator.dart`](../my_flutter_app/lib/core/services/service_locator.dart) — never instantiate Dio or a service directly.
 - Tokens sit in secure storage; a Dio interceptor injects Bearer and silently refreshes on 401 ([architecture.md](architecture.md#auth--tokens)).
-- ⚠️ Known gaps (no push handling yet, applied-status labels are local-only, login contract mismatch vs the real backend): [`../../docs/known-issues.md`](../../docs/known-issues.md) #1, #18, #19.
+- Push notifications: [`push_service.dart`](../my_flutter_app/lib/core/services/push_service.dart) registers the FCM token after login and deep-links taps to `/jobs/:id`; it's a silent no-op until `flutterfire configure` adds the Firebase config files ([known issue #2b](../../docs/known-issues.md)).
+- ⚠️ Known gaps (applied-status labels are local-only; smoke test has a pre-existing timer failure): [`../../docs/known-issues.md`](../../docs/known-issues.md) #19, #21.
 
 ## Conventions
 

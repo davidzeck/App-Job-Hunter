@@ -3,17 +3,26 @@ import 'package:provider/provider.dart';
 import 'package:job_scout/core/providers/alerts_provider.dart';
 import 'package:job_scout/core/providers/auth_provider.dart';
 import 'package:job_scout/core/providers/jobs_filter_provider.dart';
+import 'package:job_scout/core/services/push_service.dart';
 import 'package:job_scout/core/theme/app_theme.dart';
 import 'package:job_scout/core/theme/theme_provider.dart';
 import 'package:job_scout/core/router/app_router.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  // No-op in demo mode or when Firebase isn't configured for this build.
+  await PushService.instance.init();
+
+  final alertsProvider = AlertsProvider();
+  // A push while the app is open shows no system banner — refresh the badge.
+  PushService.instance.onForegroundMessage = (_) => alertsProvider.refresh();
+
   runApp(
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => AlertsProvider()),
+        ChangeNotifierProvider.value(value: alertsProvider),
         ChangeNotifierProvider(create: (_) => JobsFilterProvider()),
       ],
       child: const JobScoutApp(),

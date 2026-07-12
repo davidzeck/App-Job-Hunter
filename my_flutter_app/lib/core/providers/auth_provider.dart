@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:job_scout/core/models/models.dart';
+import 'package:job_scout/core/services/push_service.dart';
 import 'package:job_scout/core/services/service_locator.dart';
 import 'package:job_scout/core/services/token_storage.dart';
 
@@ -25,6 +28,8 @@ class AuthProvider extends ChangeNotifier {
     if (_storage.hasTokens) {
       try {
         _user = await api.getCurrentUser();
+        // Fire-and-forget: FCM registration must never block startup
+        unawaited(PushService.instance.registerToken());
       } catch (_) {
         // Token expired / network failure — clear and go to login
         await _storage.clear();
@@ -47,6 +52,7 @@ class AuthProvider extends ChangeNotifier {
         refreshToken: tokens.refreshToken,
       );
       _user = await api.getCurrentUser();
+      unawaited(PushService.instance.registerToken());
       _isLoading = false;
       notifyListeners();
       return true;
@@ -70,6 +76,7 @@ class AuthProvider extends ChangeNotifier {
         refreshToken: tokens.refreshToken,
       );
       _user = await api.getCurrentUser();
+      unawaited(PushService.instance.registerToken());
       _isLoading = false;
       notifyListeners();
       return true;
@@ -84,7 +91,10 @@ class AuthProvider extends ChangeNotifier {
   Future<void> logout() async {
     // Revoke the session server-side (best-effort) BEFORE clearing tokens —
     // the request needs the access token, and logout() never throws.
+    // The backend also nulls the stored FCM token; deleting it locally stops
+    // delivery to this (possibly shared) device entirely.
     await api.logout(_storage.refreshToken);
+    await PushService.instance.clearToken();
     await _storage.clear();
     _user = null;
     _error = null;

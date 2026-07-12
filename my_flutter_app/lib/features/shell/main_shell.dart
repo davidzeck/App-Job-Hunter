@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:job_scout/core/providers/alerts_provider.dart';
+import 'package:job_scout/core/services/push_service.dart';
 import 'package:job_scout/core/theme/app_theme.dart';
 
 class MainShell extends StatefulWidget {
@@ -27,7 +28,12 @@ class _MainShellState extends State<MainShell> {
     super.initState();
     // Kick off the first refresh after the first frame so the provider is ready
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<AlertsProvider>().refresh();
+      if (!mounted) return;
+      context.read<AlertsProvider>().refresh();
+      // App launched from a notification tap while terminated: the router
+      // didn't exist yet, so PushService stashed the target job.
+      final jobId = PushService.instance.consumePendingJobId();
+      if (jobId != null) context.push('/jobs/$jobId');
     });
   }
 

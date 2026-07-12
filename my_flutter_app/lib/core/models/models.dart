@@ -182,6 +182,48 @@ class JobListItem {
       );
 }
 
+/// GET /jobs/recommended item — a job plus its skill-overlap score.
+class RecommendedJob extends JobListItem {
+  final double matchScore; // 0-100 weighted skill coverage
+  final List<String> matchedSkills;
+
+  const RecommendedJob({
+    required super.id,
+    required super.title,
+    super.location,
+    super.locationType,
+    super.jobType,
+    required super.applyUrl,
+    required super.company,
+    super.postedAt,
+    required super.discoveredAt,
+    super.isActive,
+    required this.matchScore,
+    required this.matchedSkills,
+  });
+
+  factory RecommendedJob.fromJson(Map<String, dynamic> json) {
+    final base = JobListItem.fromJson(json);
+    return RecommendedJob(
+      id: base.id,
+      title: base.title,
+      location: base.location,
+      locationType: base.locationType,
+      jobType: base.jobType,
+      applyUrl: base.applyUrl,
+      company: base.company,
+      postedAt: base.postedAt,
+      discoveredAt: base.discoveredAt,
+      isActive: base.isActive,
+      matchScore: (json['match_score'] as num?)?.toDouble() ?? 0,
+      matchedSkills: (json['matched_skills'] as List<dynamic>?)
+              ?.map((e) => e as String)
+              .toList() ??
+          const [],
+    );
+  }
+}
+
 class JobSkillResponse {
   final String skillName;
   final String? skillCategory;

@@ -105,6 +105,45 @@ class MockApiService extends ApiServiceBase {
   }
 
   @override
+  Future<PaginatedResponse<RecommendedJob>> getRecommendedJobs({
+    int page = 1,
+    int limit = 10,
+  }) async {
+    // Deterministic fake scores over the mock jobs (descending by score).
+    const fakeSkills = [
+      ['Python', 'FastAPI', 'PostgreSQL'],
+      ['Flutter', 'Dart', 'Firebase'],
+      ['React', 'TypeScript'],
+      ['Docker', 'Kubernetes'],
+    ];
+    final recommended = <RecommendedJob>[];
+    for (var i = 0; i < mockJobs.length && i < limit; i++) {
+      final job = mockJobs[i];
+      recommended.add(RecommendedJob(
+        id: job.id,
+        title: job.title,
+        location: job.location,
+        locationType: job.locationType,
+        jobType: job.jobType,
+        applyUrl: job.applyUrl,
+        company: job.company,
+        postedAt: job.postedAt,
+        discoveredAt: job.discoveredAt,
+        isActive: job.isActive,
+        matchScore: (90 - i * 12).clamp(35, 100).toDouble(),
+        matchedSkills: fakeSkills[i % fakeSkills.length],
+      ));
+    }
+    return _withDelay(PaginatedResponse(
+      items: recommended,
+      total: recommended.length,
+      page: page,
+      limit: limit,
+      pages: 1,
+    ));
+  }
+
+  @override
   Future<JobDetail> getJobDetail(String jobId) async {
     final detail = mockJobDetails[jobId];
     if (detail != null) return _withDelay(detail);
@@ -221,6 +260,11 @@ class MockApiService extends ApiServiceBase {
   Future<void> updatePreferences(Map<String, dynamic> prefs) async {
     await _withDelay(null);
     mockUser.preferences.addAll(prefs);
+  }
+
+  @override
+  Future<void> updateFcmToken(String fcmToken) async {
+    await _withDelay(null); // demo mode: nowhere to push to
   }
 
   // ─── Skills ────────────────────────────────────────

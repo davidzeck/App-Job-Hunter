@@ -13,8 +13,11 @@ Features depend on core; core never depends on features.
 ## Startup & wiring — [`main.dart`](../my_flutter_app/lib/main.dart)
 
 ```
-runApp
-└── MultiProvider
+main (async)
+├── PushService.instance.init()   # Firebase + tap/foreground handlers;
+│                                 # no-op in demo mode or without Firebase config
+└── runApp
+    └── MultiProvider
     ├── AuthProvider        # token load, login/register/logout, isAuthenticated/isInitialized
     ├── ThemeProvider       # light/dark mode
     ├── AlertsProvider      # unread badge, home stats, recent alerts (3 parallel fetches in refresh())
@@ -66,6 +69,14 @@ AuthInterceptor (core/services/auth_interceptor.dart) on the shared Dio:
 ```
 
 ⚠️ The S3 upload path bypasses this interceptor on purpose — presigned uploads must carry no JWT ([api-integration.md](api-integration.md#cv-upload)).
+
+## Push notifications — [`push_service.dart`](../my_flutter_app/lib/core/services/push_service.dart)
+
+`PushService.instance` (singleton) owns the FCM lifecycle:
+- `init()` (before `runApp`): `Firebase.initializeApp()` + message handlers. Silently disabled in demo mode or when the Firebase config files are missing.
+- `registerToken()` (fire-and-forget from `AuthProvider` after login/register/authenticated start): permission → `getToken()` → `PUT /users/me/fcm-token`; `onTokenRefresh` keeps the backend current.
+- `clearToken()` (on logout): `deleteToken()` locally; the backend nulls its stored copy in `/auth/logout`.
+- Notification taps deep-link to `/jobs/:id` — live via the `appRouter` global; cold start via a pending id consumed in `MainShell.initState`. Foreground pushes call `onForegroundMessage` (wired in `main.dart` to `AlertsProvider.refresh()`).
 
 ## Data models — [`core/models/models.dart`](../my_flutter_app/lib/core/models/models.dart)
 
