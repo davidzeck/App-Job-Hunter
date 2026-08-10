@@ -588,3 +588,263 @@ class CVTailorResult {
         originalSummary: json['original_summary'] as String,
       );
 }
+
+// ─── CV Draft Models (full-CV curation) ───────────────────────
+
+List<String> _stringList(dynamic value) =>
+    (value as List<dynamic>?)?.cast<String>() ?? [];
+
+/// Contact block of a structured CV (backend CVContact).
+class CVContact {
+  final String name;
+  final String email;
+  final String phone;
+  final String location;
+  final List<String> links;
+
+  const CVContact({
+    this.name = '',
+    this.email = '',
+    this.phone = '',
+    this.location = '',
+    this.links = const [],
+  });
+
+  factory CVContact.fromJson(Map<String, dynamic> json) => CVContact(
+        name: json['name'] as String? ?? '',
+        email: json['email'] as String? ?? '',
+        phone: json['phone'] as String? ?? '',
+        location: json['location'] as String? ?? '',
+        links: _stringList(json['links']),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'email': email,
+        'phone': phone,
+        'location': location,
+        'links': links,
+      };
+}
+
+/// One category of skills, e.g. "Languages: Python, Go" (backend CVSkillGroup).
+class CVSkillGroup {
+  final String category;
+  final List<String> items;
+
+  const CVSkillGroup({this.category = '', this.items = const []});
+
+  factory CVSkillGroup.fromJson(Map<String, dynamic> json) => CVSkillGroup(
+        category: json['category'] as String? ?? '',
+        items: _stringList(json['items']),
+      );
+
+  Map<String, dynamic> toJson() => {'category': category, 'items': items};
+}
+
+/// One work-history entry (backend CVExperience).
+/// start/end are freeform strings ("Jan 2022", "Present").
+class CVExperience {
+  final String title;
+  final String company;
+  final String location;
+  final String start;
+  final String end;
+  final List<String> bullets;
+
+  const CVExperience({
+    this.title = '',
+    this.company = '',
+    this.location = '',
+    this.start = '',
+    this.end = '',
+    this.bullets = const [],
+  });
+
+  factory CVExperience.fromJson(Map<String, dynamic> json) => CVExperience(
+        title: json['title'] as String? ?? '',
+        company: json['company'] as String? ?? '',
+        location: json['location'] as String? ?? '',
+        start: json['start'] as String? ?? '',
+        end: json['end'] as String? ?? '',
+        bullets: _stringList(json['bullets']),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'title': title,
+        'company': company,
+        'location': location,
+        'start': start,
+        'end': end,
+        'bullets': bullets,
+      };
+}
+
+/// One education entry (backend CVEducation).
+class CVEducation {
+  final String degree;
+  final String institution;
+  final String year;
+
+  const CVEducation({this.degree = '', this.institution = '', this.year = ''});
+
+  factory CVEducation.fromJson(Map<String, dynamic> json) => CVEducation(
+        degree: json['degree'] as String? ?? '',
+        institution: json['institution'] as String? ?? '',
+        year: json['year'] as String? ?? '',
+      );
+
+  Map<String, dynamic> toJson() =>
+      {'degree': degree, 'institution': institution, 'year': year};
+}
+
+/// A CV as structured data (backend CVStructure) — the contract between
+/// the AI parse/tailor stages, the review editor, and the doc renderers.
+/// Every field is defaulted so a partial payload still parses.
+class CVStructure {
+  final CVContact contact;
+  final String summary;
+  final List<CVSkillGroup> skills;
+  final List<CVExperience> experience;
+  final List<CVEducation> education;
+  final List<String> certifications;
+
+  const CVStructure({
+    this.contact = const CVContact(),
+    this.summary = '',
+    this.skills = const [],
+    this.experience = const [],
+    this.education = const [],
+    this.certifications = const [],
+  });
+
+  factory CVStructure.fromJson(Map<String, dynamic> json) => CVStructure(
+        contact: json['contact'] != null
+            ? CVContact.fromJson(json['contact'] as Map<String, dynamic>)
+            : const CVContact(),
+        summary: json['summary'] as String? ?? '',
+        skills: (json['skills'] as List<dynamic>?)
+                ?.map((e) => CVSkillGroup.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            [],
+        experience: (json['experience'] as List<dynamic>?)
+                ?.map((e) => CVExperience.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            [],
+        education: (json['education'] as List<dynamic>?)
+                ?.map((e) => CVEducation.fromJson(e as Map<String, dynamic>))
+                .toList() ??
+            [],
+        certifications: _stringList(json['certifications']),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'contact': contact.toJson(),
+        'summary': summary,
+        'skills': skills.map((s) => s.toJson()).toList(),
+        'experience': experience.map((e) => e.toJson()).toList(),
+        'education': education.map((e) => e.toJson()).toList(),
+        'certifications': certifications,
+      };
+}
+
+/// Draft content payload: {original, tailored, keywords_injected}.
+class CVDraftContent {
+  final CVStructure original;
+  final CVStructure tailored;
+  final List<String> keywordsInjected;
+
+  const CVDraftContent({
+    this.original = const CVStructure(),
+    this.tailored = const CVStructure(),
+    this.keywordsInjected = const [],
+  });
+
+  factory CVDraftContent.fromJson(Map<String, dynamic> json) => CVDraftContent(
+        original: json['original'] != null
+            ? CVStructure.fromJson(json['original'] as Map<String, dynamic>)
+            : const CVStructure(),
+        tailored: json['tailored'] != null
+            ? CVStructure.fromJson(json['tailored'] as Map<String, dynamic>)
+            : const CVStructure(),
+        keywordsInjected: _stringList(json['keywords_injected']),
+      );
+}
+
+/// Matches the backend CVDraftResponse schema.
+/// status: generating | review | approved | rendered | failed | superseded
+class CVDraft {
+  final String id;
+  final String cvId;
+  final String jobId;
+  final String status;
+  final CVDraftContent? content; // null while generating
+  final String? error;
+  final bool docxReady;
+  final bool pdfReady;
+  final DateTime? approvedAt;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+
+  const CVDraft({
+    required this.id,
+    required this.cvId,
+    required this.jobId,
+    required this.status,
+    this.content,
+    this.error,
+    this.docxReady = false,
+    this.pdfReady = false,
+    this.approvedAt,
+    required this.createdAt,
+    required this.updatedAt,
+  });
+
+  bool get isGenerating => status == 'generating';
+  bool get isReview => status == 'review';
+  bool get isApproved => status == 'approved';
+  bool get isRendered => status == 'rendered';
+  bool get isFailed => status == 'failed';
+  bool get isSuperseded => status == 'superseded';
+
+  /// Transient states the client should keep polling through.
+  bool get isPolling => isGenerating || isApproved;
+
+  factory CVDraft.fromJson(Map<String, dynamic> json) => CVDraft(
+        id: json['id'] as String,
+        cvId: json['cv_id'] as String,
+        jobId: json['job_id'] as String,
+        status: json['status'] as String,
+        content: json['content'] != null
+            ? CVDraftContent.fromJson(json['content'] as Map<String, dynamic>)
+            : null,
+        error: json['error'] as String?,
+        docxReady: json['docx_ready'] as bool? ?? false,
+        pdfReady: json['pdf_ready'] as bool? ?? false,
+        approvedAt: json['approved_at'] != null
+            ? DateTime.parse(json['approved_at'] as String)
+            : null,
+        createdAt: DateTime.parse(json['created_at'] as String),
+        updatedAt: DateTime.parse(json['updated_at'] as String),
+      );
+}
+
+/// Returned by curate and approve (202): {task_id, draft_id, status}.
+class CurateStartResponse {
+  final String taskId;
+  final String draftId;
+  final String status;
+
+  const CurateStartResponse({
+    required this.taskId,
+    required this.draftId,
+    this.status = 'pending',
+  });
+
+  factory CurateStartResponse.fromJson(Map<String, dynamic> json) =>
+      CurateStartResponse(
+        taskId: json['task_id'] as String,
+        draftId: json['draft_id'] as String,
+        status: json['status'] as String? ?? 'pending',
+      );
+}

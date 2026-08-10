@@ -13,6 +13,8 @@ import 'package:job_scout/features/alerts/alerts_screen.dart';
 import 'package:job_scout/features/profile/profile_screen.dart';
 import 'package:job_scout/features/profile/skills_screen.dart';
 import 'package:job_scout/features/profile/applied_screen.dart';
+import 'package:job_scout/features/profile/cv_management_screen.dart';
+import 'package:job_scout/features/profile/cv_draft_screen.dart';
 
 /// Global router handle for navigation from outside the widget tree
 /// (notification taps in PushService). Set by [createRouter].
@@ -122,6 +124,16 @@ GoRouter createRouter(AuthProvider authProvider) => appRouter = GoRouter(
         GoRoute(
           path: '/profile/applied',
           builder: (_, __) => const AppliedScreen(),
+        ),
+        GoRoute(
+          path: '/profile/cvs',
+          builder: (_, __) => const CvManagementScreen(),
+        ),
+        GoRoute(
+          path: '/profile/cvs/drafts/:id',
+          builder: (_, state) => CvDraftScreen(
+            draftId: state.pathParameters['id']!,
+          ),
         ),
       ],
     );

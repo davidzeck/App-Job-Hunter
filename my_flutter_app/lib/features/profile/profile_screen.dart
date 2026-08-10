@@ -697,13 +697,15 @@ class _AccountCard extends StatelessWidget {
                   ?.copyWith(fontWeight: FontWeight.w600),
             ),
             subtitle: Text(
-              'Upload & manage your CVs via the web dashboard',
+              'Upload CVs and download tailored versions',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: isDark
                     ? AppColors.mutedForegroundDark
                     : AppColors.mutedForegroundLight,
               ),
             ),
+            trailing: const Icon(Icons.chevron_right, size: 18),
+            onTap: () => context.push('/profile/cvs'),
           ),
           const Divider(height: 1, indent: 56),
           ListTile(

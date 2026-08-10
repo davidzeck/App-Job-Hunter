@@ -1,6 +1,6 @@
 # Job Scout Mobile (Flutter) — Documentation
 
-Flutter app (package `job_scout`) — the job-seeker client. Deliberately a **thin client**: browse jobs, receive alerts, view skill gaps, run AI CV analysis/tailoring. CV *management* (upload/delete) is web-only; the app points users to the dashboard.
+Flutter app (package `job_scout`) — the job-seeker client. Browse jobs, receive alerts, view skill gaps, run AI CV analysis/tailoring, and (since 2026-07-15) the **full client-side CV flow**: upload/manage CVs (Profile → Manage CVs), curate a job-tailored CV, review/edit/approve the draft, and download it as PDF/DOCX. The web dashboard offers the same CV flow at `/cvs`.
 
 Code lives in [`my_flutter_app/`](../my_flutter_app/). System-level context: [`../../docs/`](../../docs/README.md) · API contract: [`../../Job-backend/docs/api-reference.md`](../../Job-backend/docs/api-reference.md)
 

@@ -388,4 +388,247 @@ class MockApiService extends ApiServiceBase {
       result: {},
     ));
   }
+
+  // ─── CV Drafts (full-CV curation) ──────────────────
+
+  // In-memory drafts with time-based status progression so the
+  // client's polling code paths run unchanged in demo mode:
+  // generating → review after ~3s, approved → rendered after ~3s.
+  final List<CVDraft> _mockDrafts = [];
+
+  static const _mockOriginalStructure = CVStructure(
+    contact: CVContact(
+      name: 'Demo User',
+      email: 'dev@jobscout.com',
+      phone: '+254 700 000000',
+      location: 'Nairobi, Kenya',
+      links: ['github.com/demo-user'],
+    ),
+    summary:
+        'Software engineer with experience in Python and web development.',
+    skills: [
+      CVSkillGroup(category: 'Languages', items: ['Python', 'JavaScript']),
+      CVSkillGroup(category: 'Frameworks', items: ['FastAPI', 'React']),
+    ],
+    experience: [
+      CVExperience(
+        title: 'Software Engineer',
+        company: 'TechCo Nairobi',
+        location: 'Nairobi',
+        start: 'Jan 2022',
+        end: 'Present',
+        bullets: [
+          'Built REST APIs with FastAPI and PostgreSQL',
+          'Maintained CI pipelines',
+        ],
+      ),
+      CVExperience(
+        title: 'Junior Developer',
+        company: 'StartupHub',
+        location: 'Nairobi',
+        start: 'Jun 2020',
+        end: 'Dec 2021',
+        bullets: ['Developed internal tools in Python'],
+      ),
+    ],
+    education: [
+      CVEducation(
+        degree: 'BSc Computer Science',
+        institution: 'University of Nairobi',
+        year: '2020',
+      ),
+    ],
+    certifications: ['AWS Cloud Practitioner'],
+  );
+
+  static const _mockTailoredStructure = CVStructure(
+    contact: CVContact(
+      name: 'Demo User',
+      email: 'dev@jobscout.com',
+      phone: '+254 700 000000',
+      location: 'Nairobi, Kenya',
+      links: ['github.com/demo-user'],
+    ),
+    summary:
+        'Backend engineer with 4+ years building scalable Python services '
+        '(FastAPI, PostgreSQL) with containerized Kubernetes deployments '
+        'and automated CI/CD.',
+    skills: [
+      CVSkillGroup(
+        category: 'Languages',
+        items: ['Python', 'JavaScript', 'SQL'],
+      ),
+      CVSkillGroup(
+        category: 'Frameworks & Tools',
+        items: ['FastAPI', 'React', 'Docker', 'Kubernetes', 'CI/CD'],
+      ),
+    ],
+    experience: [
+      CVExperience(
+        title: 'Software Engineer',
+        company: 'TechCo Nairobi',
+        location: 'Nairobi',
+        start: 'Jan 2022',
+        end: 'Present',
+        bullets: [
+          'Designed and shipped REST APIs with FastAPI and PostgreSQL serving 10k+ daily requests',
+          'Automated CI/CD pipelines, cutting release time by 60%',
+        ],
+      ),
+      CVExperience(
+        title: 'Junior Developer',
+        company: 'StartupHub',
+        location: 'Nairobi',
+        start: 'Jun 2020',
+        end: 'Dec 2021',
+        bullets: ['Developed internal Python tooling adopted by 3 teams'],
+      ),
+    ],
+    education: [
+      CVEducation(
+        degree: 'BSc Computer Science',
+        institution: 'University of Nairobi',
+        year: '2020',
+      ),
+    ],
+    certifications: ['AWS Cloud Practitioner'],
+  );
+
+  /// Advance time-based mock status transitions in place.
+  void _progressDrafts() {
+    final now = DateTime.now();
+    for (var i = 0; i < _mockDrafts.length; i++) {
+      final d = _mockDrafts[i];
+      if (d.isGenerating && now.difference(d.createdAt).inSeconds >= 3) {
+        _mockDrafts[i] = CVDraft(
+          id: d.id,
+          cvId: d.cvId,
+          jobId: d.jobId,
+          status: 'review',
+          content: const CVDraftContent(
+            original: _mockOriginalStructure,
+            tailored: _mockTailoredStructure,
+            keywordsInjected: ['Kubernetes', 'CI/CD'],
+          ),
+          createdAt: d.createdAt,
+          updatedAt: now,
+        );
+      } else if (d.isApproved &&
+          d.approvedAt != null &&
+          now.difference(d.approvedAt!).inSeconds >= 3) {
+        _mockDrafts[i] = CVDraft(
+          id: d.id,
+          cvId: d.cvId,
+          jobId: d.jobId,
+          status: 'rendered',
+          content: d.content,
+          docxReady: true,
+          pdfReady: true,
+          approvedAt: d.approvedAt,
+          createdAt: d.createdAt,
+          updatedAt: now,
+        );
+      }
+    }
+  }
+
+  @override
+  Future<CurateStartResponse> curateCv(String cvId, String jobId) async {
+    await _withDelay(null);
+    // A new curation supersedes any prior non-terminal draft for (cv, job).
+    for (var i = 0; i < _mockDrafts.length; i++) {
+      final d = _mockDrafts[i];
+      if (d.cvId == cvId && d.jobId == jobId && !d.isFailed && !d.isSuperseded) {
+        _mockDrafts[i] = CVDraft(
+          id: d.id,
+          cvId: d.cvId,
+          jobId: d.jobId,
+          status: 'superseded',
+          content: d.content,
+          docxReady: d.docxReady,
+          pdfReady: d.pdfReady,
+          approvedAt: d.approvedAt,
+          createdAt: d.createdAt,
+          updatedAt: DateTime.now(),
+        );
+      }
+    }
+    final draft = CVDraft(
+      id: 'mock-draft-${_mockDrafts.length + 1}',
+      cvId: cvId,
+      jobId: jobId,
+      status: 'generating',
+      createdAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+    );
+    _mockDrafts.add(draft);
+    return CurateStartResponse(
+      taskId: 'mock-curate-${_mockDrafts.length}',
+      draftId: draft.id,
+    );
+  }
+
+  @override
+  Future<List<CVDraft>> listDrafts() async {
+    _progressDrafts();
+    return _withDelay(
+      _mockDrafts.where((d) => !d.isSuperseded).toList().reversed.toList(),
+    );
+  }
+
+  @override
+  Future<CVDraft> getDraft(String draftId) async {
+    _progressDrafts();
+    return _withDelay(
+      _mockDrafts.firstWhere(
+        (d) => d.id == draftId,
+        orElse: () => throw Exception('Draft not found'),
+      ),
+    );
+  }
+
+  @override
+  Future<CVDraft> updateDraft(String draftId, CVStructure tailored) async {
+    await _withDelay(null);
+    final i = _mockDrafts.indexWhere((d) => d.id == draftId);
+    if (i < 0) throw Exception('Draft not found');
+    final d = _mockDrafts[i];
+    _mockDrafts[i] = CVDraft(
+      id: d.id,
+      cvId: d.cvId,
+      jobId: d.jobId,
+      status: d.status,
+      content: CVDraftContent(
+        original: d.content?.original ?? _mockOriginalStructure,
+        tailored: tailored,
+        keywordsInjected: d.content?.keywordsInjected ?? const [],
+      ),
+      createdAt: d.createdAt,
+      updatedAt: DateTime.now(),
+    );
+    return _mockDrafts[i];
+  }
+
+  @override
+  Future<CurateStartResponse> approveDraft(String draftId) async {
+    await _withDelay(null);
+    final i = _mockDrafts.indexWhere((d) => d.id == draftId);
+    if (i < 0) throw Exception('Draft not found');
+    final d = _mockDrafts[i];
+    _mockDrafts[i] = CVDraft(
+      id: d.id,
+      cvId: d.cvId,
+      jobId: d.jobId,
+      status: 'approved',
+      content: d.content,
+      approvedAt: DateTime.now(),
+      createdAt: d.createdAt,
+      updatedAt: DateTime.now(),
+    );
+    return CurateStartResponse(taskId: 'mock-render-$draftId', draftId: draftId);
+  }
+
+  @override
+  Future<String> getDraftDownloadUrl(String draftId, String format) =>
+      _withDelay('https://mock-s3.example.com/drafts/$draftId/cv.$format');
 }

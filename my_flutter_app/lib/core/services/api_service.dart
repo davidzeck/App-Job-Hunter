@@ -485,6 +485,82 @@ class ApiService extends ApiServiceBase {
       throw Exception(_message(e));
     }
   }
+
+  // ─── CV Drafts (full-CV curation) ──────────────────
+
+  @override
+  Future<CurateStartResponse> curateCv(String cvId, String jobId) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/users/me/cv/$cvId/curate',
+        data: {'job_id': jobId},
+      );
+      return CurateStartResponse.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<List<CVDraft>> listDrafts() async {
+    try {
+      final res = await _dio.get<List<dynamic>>('/users/me/cv/drafts');
+      return (res.data!)
+          .map((d) => CVDraft.fromJson(d as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<CVDraft> getDraft(String draftId) async {
+    try {
+      final res =
+          await _dio.get<Map<String, dynamic>>('/users/me/cv/drafts/$draftId');
+      return CVDraft.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<CVDraft> updateDraft(String draftId, CVStructure tailored) async {
+    try {
+      final res = await _dio.patch<Map<String, dynamic>>(
+        '/users/me/cv/drafts/$draftId',
+        data: {'tailored': tailored.toJson()},
+      );
+      return CVDraft.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<CurateStartResponse> approveDraft(String draftId) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/users/me/cv/drafts/$draftId/approve',
+      );
+      return CurateStartResponse.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<String> getDraftDownloadUrl(String draftId, String format) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/users/me/cv/drafts/$draftId/download',
+        queryParameters: {'format': format},
+      );
+      return res.data!['download_url'] as String;
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
 }
 
 // ─── fromJson for SkillGapResponse ─────────────────────────────

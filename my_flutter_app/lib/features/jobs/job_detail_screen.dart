@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:job_scout/core/models/models.dart';
 import 'package:job_scout/core/services/service_locator.dart';
@@ -30,6 +31,7 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
   CVTailorResult? _tailorResult;
   bool _isAnalyzing = false;
   bool _isTailoring = false;
+  bool _isCurating = false;
   String? _analysisError;
   String? _tailorError;
   bool _analysisExpanded = false;
@@ -142,6 +144,27 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
           _isTailoring = false;
         });
       }
+    }
+  }
+
+  /// Start a full-CV curation and jump to the draft review screen.
+  Future<void> _startCurate() async {
+    final cv = _readyCv;
+    if (cv == null || _isCurating) return;
+    setState(() => _isCurating = true);
+    try {
+      final res = await _api.curateCv(cv.id, widget.jobId);
+      if (mounted) context.push('/profile/cvs/drafts/${res.draftId}');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(e.toString().replaceFirst('Exception: ', '')),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isCurating = false);
     }
   }
 
@@ -437,11 +460,13 @@ class _JobDetailScreenState extends State<JobDetailScreen> {
               tailorResult: _tailorResult,
               isAnalyzing: _isAnalyzing,
               isTailoring: _isTailoring,
+              isCurating: _isCurating,
               analysisError: _analysisError,
               tailorError: _tailorError,
               expanded: _analysisExpanded,
               onAnalyze: _startAnalysis,
               onTailor: _startTailor,
+              onCurate: _startCurate,
               onToggle: () {
                 setState(() => _analysisExpanded = !_analysisExpanded);
               },
@@ -835,11 +860,13 @@ class _CVAnalysisSection extends StatelessWidget {
   final CVTailorResult? tailorResult;
   final bool isAnalyzing;
   final bool isTailoring;
+  final bool isCurating;
   final String? analysisError;
   final String? tailorError;
   final bool expanded;
   final VoidCallback onAnalyze;
   final VoidCallback onTailor;
+  final VoidCallback onCurate;
   final VoidCallback onToggle;
 
   const _CVAnalysisSection({
@@ -848,11 +875,13 @@ class _CVAnalysisSection extends StatelessWidget {
     this.tailorResult,
     required this.isAnalyzing,
     required this.isTailoring,
+    required this.isCurating,
     this.analysisError,
     this.tailorError,
     required this.expanded,
     required this.onAnalyze,
     required this.onTailor,
+    required this.onCurate,
     required this.onToggle,
   });
 
@@ -861,29 +890,35 @@ class _CVAnalysisSection extends StatelessWidget {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
-    // No CV available — show info tile
+    // No CV available — show info tile linking to the CV hub
     if (readyCv == null) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
         child: Card(
           color: AppColors.primaryBlue.withValues(alpha: 0.06),
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                Icon(Icons.auto_awesome, color: AppColors.primaryBlue, size: 22),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    'Upload a CV in the web dashboard to unlock AI analysis.',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: isDark
-                          ? AppColors.mutedForegroundDark
-                          : AppColors.mutedForegroundLight,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => context.push('/profile/cvs'),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Row(
+                children: [
+                  Icon(Icons.auto_awesome,
+                      color: AppColors.primaryBlue, size: 22),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      'Upload a CV in Profile → Manage CVs to unlock AI analysis.',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: isDark
+                            ? AppColors.mutedForegroundDark
+                            : AppColors.mutedForegroundLight,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                  const Icon(Icons.chevron_right, size: 18),
+                ],
+              ),
             ),
           ),
         ),
@@ -1123,6 +1158,39 @@ class _CVAnalysisSection extends StatelessWidget {
                               ),
                       ),
                     ],
+
+                    // Curate full CV (draft → review → PDF/DOCX)
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.tonalIcon(
+                        onPressed: (isCurating || isAnalyzing || isTailoring)
+                            ? null
+                            : onCurate,
+                        icon: isCurating
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.description_outlined, size: 18),
+                        label: Text(isCurating
+                            ? 'Starting curation…'
+                            : 'Curate Full CV (PDF/Word)'),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'AI tailors your whole CV for this job — review, '
+                      'approve, then download.',
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: isDark
+                            ? AppColors.mutedForegroundDark
+                            : AppColors.mutedForegroundLight,
+                      ),
+                    ),
                   ],
                 ),
               ),

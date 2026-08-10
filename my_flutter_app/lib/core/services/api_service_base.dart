@@ -121,4 +121,25 @@ abstract class ApiServiceBase {
 
   /// Poll a Celery task by ID.
   Future<CVTaskStatusResponse> getCvTaskStatus(String taskId);
+
+  // ─── CV Drafts (full-CV curation) ──────────────────
+
+  /// Start curating a full CV against a job. Supersedes any prior
+  /// non-terminal draft for the same (cv, job). Rate-limited (429).
+  Future<CurateStartResponse> curateCv(String cvId, String jobId);
+
+  /// The caller's curation drafts, newest first (superseded excluded).
+  Future<List<CVDraft>> listDrafts();
+
+  Future<CVDraft> getDraft(String draftId);
+
+  /// Persist user edits to the tailored structure (review stage only).
+  Future<CVDraft> updateDraft(String draftId, CVStructure tailored);
+
+  /// Approve a reviewed draft — enqueues DOCX/PDF rendering.
+  Future<CurateStartResponse> approveDraft(String draftId);
+
+  /// Presigned download URL for a rendered document. 409 until rendered.
+  /// [format] is 'pdf' or 'docx'.
+  Future<String> getDraftDownloadUrl(String draftId, String format);
 }

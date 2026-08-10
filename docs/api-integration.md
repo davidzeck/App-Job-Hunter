@@ -27,6 +27,7 @@ Singleton over the shared Dio from [`api_client.dart`](../my_flutter_app/lib/cor
 | Skills | `GET /users/me/skills`, `POST /users/me/skills`, `DELETE /users/me/skills/{skill}` |
 | CV | `POST /users/me/cv/presign`, `POST /users/me/cv/{id}/confirm`, `GET /users/me/cv`, `GET /users/me/cv/{id}/download-url`, `DELETE /users/me/cv/{id}` |
 | AI/ATS | `POST /users/me/cv/{id}/analyze`, `POST /users/me/cv/{id}/tailor`, `GET /users/me/cv/tasks/{taskId}` |
+| CV drafts | `POST /users/me/cv/{id}/curate`, `GET /users/me/cv/drafts`, `GET/PATCH /users/me/cv/drafts/{id}`, `POST /users/me/cv/drafts/{id}/approve`, `GET /users/me/cv/drafts/{id}/download?format=pdf\|docx` |
 
 > ⚠️ **Login contract mismatch**: `login()` sends `FormData {username, password}` as `application/x-www-form-urlencoded` (assuming FastAPI's `OAuth2PasswordRequestForm`), but the backend expects **JSON `{email, password}`** — real-backend login currently 422s. See [known issue #1](../../docs/known-issues.md). Demo mode is unaffected.
 

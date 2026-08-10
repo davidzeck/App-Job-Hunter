@@ -90,4 +90,4 @@ Two parsing extensions (`SkillGapResponseParsing`, `AlertResponseParsing`) live 
 
 ## Key dependencies ([pubspec.yaml](../my_flutter_app/pubspec.yaml))
 
-`provider` 6 · `go_router` 14 · `dio` 5 · `flutter_secure_storage` 9 · `shared_preferences` (onboarding flag) · `google_fonts` (Inter) · `flutter_animate` · `cached_network_image` (logos) · `url_launcher` (apply links) · `file_picker` + `crypto` (CV SHA-256; upload UI currently web-only) · `intl`.
+`provider` 6 · `go_router` 14 · `dio` 5 · `flutter_secure_storage` 9 · `shared_preferences` (onboarding flag) · `google_fonts` (Inter) · `flutter_animate` · `cached_network_image` (logos) · `url_launcher` (apply links) · `file_picker` + `crypto` (CV picker + SHA-256 for upload dedup) · `intl`.

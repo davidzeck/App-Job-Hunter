@@ -54,4 +54,4 @@ Mode switching: [`theme_provider.dart`](../my_flutter_app/lib/core/theme/theme_p
 - Show `skeleton_loader` for initial loads, inline spinners only for in-place actions (button-level progress on analyze/tailor).
 - Every network failure path renders `error_state` with retry, or a snackbar for transient action failures — never silent failure.
 - 429 from AI endpoints: show the friendly limit message; don't auto-retry.
-- CV management is intentionally absent: Profile shows a "Manage CVs via web dashboard" tile — don't add upload UI here without a product decision.
+- CV management is client-facing (since 2026-07-15): Profile → "Manage CVs" opens `/profile/cvs` (upload, list, delete, download, tailored-CV drafts); drafts open the status-driven editor at `/profile/cvs/drafts/:id`.
