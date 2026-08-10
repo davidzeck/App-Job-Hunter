@@ -15,7 +15,8 @@ var mockUserSkills = <String>[
   'AWS',
 ];
 
-final mockUser = UserProfileResponse(
+// Mutable — the career-state control writes back to it.
+var mockUser = UserProfileResponse(
   id: 'u-001',
   email: 'dev@jobscout.com',
   fullName: 'Alex Kimani',
@@ -30,9 +31,152 @@ final mockUser = UserProfileResponse(
   },
   skillsCount: 8,
   hasCv: true,
+  careerState: 'open',
   createdAt: DateTime(2024, 6, 1),
   updatedAt: DateTime.now(),
 );
+
+// ─── Career memory ─────────────────────────────────────────────
+
+/// Mutable — the roles screen adds, edits and removes these.
+var mockEmployments = <Employment>[
+  Employment(
+    id: 'emp-001',
+    employerName: 'TechCorp Kenya',
+    roleTitle: 'Software Engineer',
+    startDate: DateTime(2022, 1, 10),
+    isCurrent: true,
+  ),
+  Employment(
+    id: 'emp-002',
+    employerName: 'StartupHub',
+    roleTitle: 'Junior Developer',
+    startDate: DateTime(2020, 6, 1),
+    endDate: DateTime(2021, 12, 31),
+  ),
+];
+
+/// Mutable — the log grows as the demo user captures wins.
+/// One entry deliberately lacks a metric so the "add a number" nudge is
+/// reachable in demo mode.
+var mockAchievements = <Achievement>[
+  Achievement(
+    id: 'ach-001',
+    employmentId: 'emp-001',
+    occurredAt: DateTime.now().subtract(const Duration(days: 4)),
+    rawText:
+        'Rewrote the checkout payment flow to batch provider calls. Latency '
+        'dropped from 800ms to 480ms and support tickets about failed '
+        'payments halved.',
+    status: 'structured',
+    headline: 'Cut checkout latency 40% by batching provider calls',
+    structured: const {
+      'action': 'Rewrote the checkout payment flow to batch provider calls',
+      'impact': 'Faster checkout and half as many failed-payment tickets',
+      'metric': '40% lower checkout latency',
+      'skills': ['Python', 'System Design', 'Performance'],
+      'category': 'technical',
+      'cv_bullet':
+          'Rewrote checkout payment flow to batch provider calls, cutting '
+          'latency 40% (800ms → 480ms) and halving failed-payment tickets.',
+    },
+  ),
+  Achievement(
+    id: 'ach-002',
+    employmentId: 'emp-001',
+    occurredAt: DateTime.now().subtract(const Duration(days: 18)),
+    rawText:
+        'Onboarded two new backend engineers — wrote the setup guide and '
+        'paired with them through their first tickets.',
+    status: 'structured',
+    headline: 'Onboarded two backend engineers onto the team',
+    structured: const {
+      'action': 'Wrote the setup guide and paired through their first tickets',
+      'impact': 'Both engineers shipping independently within their first weeks',
+      'metric': '',
+      'skills': ['Mentoring', 'Documentation'],
+      'category': 'leadership',
+      'cv_bullet':
+          'Onboarded two backend engineers, authoring the environment setup '
+          'guide and pairing them through their first production tickets.',
+    },
+    needsMetric: true,
+  ),
+  Achievement(
+    id: 'ach-003',
+    employmentId: 'emp-001',
+    occurredAt: DateTime.now().subtract(const Duration(days: 46)),
+    rawText:
+        'Moved our CI from a single 25-minute job to parallel stages. Builds '
+        'now finish in 9 minutes and the team stopped batching merges.',
+    status: 'structured',
+    headline: 'Cut CI build time from 25 to 9 minutes',
+    structured: const {
+      'action': 'Split a monolithic CI job into parallel stages',
+      'impact': 'Team stopped batching merges to avoid slow builds',
+      'metric': '64% faster builds (25min → 9min)',
+      'skills': ['CI/CD', 'Docker'],
+      'category': 'process',
+      'cv_bullet':
+          'Parallelised CI pipeline stages, cutting build time from 25 to 9 '
+          'minutes and unblocking continuous merges.',
+    },
+  ),
+];
+
+// ─── Interview practice ────────────────────────────────────────
+
+/// Mirrors the backend's curated bank, including the competency tags that
+/// evidence matching depends on (see known-issues #36).
+const mockQuestions = <PracticeQuestion>[
+  PracticeQuestion(
+    id: 'q-001',
+    category: 'intro',
+    question: 'Tell me about yourself.',
+  ),
+  PracticeQuestion(
+    id: 'q-002',
+    category: 'behavioral',
+    question:
+        'Tell me about a time you had to deliver under a tight deadline. '
+        'What did you do?',
+    skillTags: ['delivery', 'prioritisation'],
+  ),
+  PracticeQuestion(
+    id: 'q-003',
+    category: 'behavioral',
+    question:
+        'Describe a technical decision you made that turned out to be wrong.',
+    skillTags: ['judgment', 'ownership'],
+  ),
+  PracticeQuestion(
+    id: 'q-004',
+    category: 'behavioral',
+    question:
+        'Tell me about a time you disagreed with a colleague. How was it '
+        'resolved?',
+    skillTags: ['collaboration', 'communication'],
+  ),
+  PracticeQuestion(
+    id: 'q-005',
+    category: 'technical',
+    question:
+        'Walk me through how you would debug an API endpoint that is slow in '
+        'production.',
+    skillTags: ['debugging', 'performance'],
+  ),
+  PracticeQuestion(
+    id: 'q-006',
+    category: 'situational',
+    question: 'You are two days from a release and find a serious bug. '
+        'What do you do?',
+    skillTags: ['judgment', 'communication'],
+  ),
+];
+
+/// Mutable — practice sittings accumulate as the demo user records.
+var mockSessions = <PracticeSession>[];
+var mockAnswers = <PracticeAnswer>[];
 
 // ─── Companies ─────────────────────────────────────────────────
 

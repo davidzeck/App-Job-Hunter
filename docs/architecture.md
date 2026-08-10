@@ -5,7 +5,7 @@
 ```
 lib/
 ├── core/        # shared infrastructure — config, models, services, providers, router, theme, widgets
-└── features/    # one folder per screen domain — auth, onboarding, shell, home, jobs, companies, alerts, profile
+└── features/    # one folder per screen domain — auth, onboarding, shell, home, jobs, practice, career, companies, alerts, profile
 ```
 
 Features depend on core; core never depends on features.
@@ -32,7 +32,7 @@ State philosophy: `ChangeNotifier` providers only for **cross-screen** state (au
 go_router with:
 - `initialLocation: '/splash'`, `refreshListenable: authProvider` — auth changes re-evaluate routing.
 - A `redirect` guard: unauthenticated users can only reach public routes (splash/onboarding/login/register); authenticated users are kept out of auth screens.
-- **`ShellRoute`** wraps the 5 bottom-nav tabs — `/home`, `/jobs`, `/companies`, `/alerts`, `/profile` — inside [`main_shell.dart`](../my_flutter_app/lib/features/shell/main_shell.dart) (NavigationBar + unread-alerts badge), with `NoTransitionPage` for instant tab switches.
+- **`ShellRoute`** wraps the 5 bottom-nav tabs — `/home`, `/jobs`, `/practice`, `/career`, `/profile` — inside [`main_shell.dart`](../my_flutter_app/lib/features/shell/main_shell.dart) (NavigationBar + unread-alerts badge), with `NoTransitionPage` for instant tab switches.
 - Detail/sub-routes sit **outside** the shell (full-screen push): `/jobs/:id`, `/profile/skills`, `/profile/applied`.
 
 Launch decision (in [`splash_screen.dart`](../my_flutter_app/lib/features/auth/splash_screen.dart)): `AuthProvider.initialize()` → authenticated → `/home`; else onboarding seen (SharedPreferences flag) → `/auth/login`; else → `/onboarding`.

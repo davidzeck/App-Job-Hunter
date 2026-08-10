@@ -561,6 +561,399 @@ class ApiService extends ApiServiceBase {
       throw Exception(_message(e));
     }
   }
+
+  // ─── Career state ──────────────────────────────────
+
+  @override
+  Future<void> updateCareerState(String careerState) async {
+    try {
+      await _dio.patch<Map<String, dynamic>>(
+        '/users/me',
+        data: {'career_state': careerState},
+      );
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  // ─── Employments ───────────────────────────────────
+
+  /// Backend date columns are `date`, not datetime — send bare YYYY-MM-DD.
+  static String _ymd(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-'
+      '${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}';
+
+  @override
+  Future<List<Employment>> listEmployments() async {
+    try {
+      final res = await _dio.get<List<dynamic>>('/employments');
+      return (res.data!)
+          .map((e) => Employment.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<Employment> createEmployment({
+    required String employerName,
+    required String roleTitle,
+    required DateTime startDate,
+    DateTime? endDate,
+    bool isCurrent = false,
+  }) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/employments',
+        data: {
+          'employer_name': employerName,
+          'role_title': roleTitle,
+          'start_date': _ymd(startDate),
+          if (endDate != null) 'end_date': _ymd(endDate),
+          'is_current': isCurrent,
+        },
+      );
+      return Employment.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<Employment> updateEmployment(
+    String employmentId, {
+    String? employerName,
+    String? roleTitle,
+    DateTime? startDate,
+    DateTime? endDate,
+    bool? isCurrent,
+  }) async {
+    try {
+      final res = await _dio.patch<Map<String, dynamic>>(
+        '/employments/$employmentId',
+        data: {
+          if (employerName != null) 'employer_name': employerName,
+          if (roleTitle != null) 'role_title': roleTitle,
+          if (startDate != null) 'start_date': _ymd(startDate),
+          if (endDate != null) 'end_date': _ymd(endDate),
+          if (isCurrent != null) 'is_current': isCurrent,
+        },
+      );
+      return Employment.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<void> deleteEmployment(String employmentId) async {
+    try {
+      await _dio.delete<Map<String, dynamic>>('/employments/$employmentId');
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  // ─── Achievement log ───────────────────────────────
+
+  @override
+  Future<AchievementStartResponse> logAchievement(
+    String rawText, {
+    DateTime? occurredAt,
+    String? employmentId,
+  }) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/achievements',
+        data: {
+          'raw_text': rawText,
+          if (occurredAt != null) 'occurred_at': _ymd(occurredAt),
+          if (employmentId != null) 'employment_id': employmentId,
+        },
+      );
+      return AchievementStartResponse.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<List<Achievement>> listAchievements({
+    DateTime? from,
+    DateTime? to,
+    String? employmentId,
+    String? category,
+    int limit = 50,
+  }) async {
+    try {
+      final res = await _dio.get<List<dynamic>>(
+        '/achievements',
+        queryParameters: {
+          if (from != null) 'from': _ymd(from),
+          if (to != null) 'to': _ymd(to),
+          if (employmentId != null) 'employment_id': employmentId,
+          if (category != null) 'category': category,
+          'limit': limit,
+        },
+      );
+      return (res.data!)
+          .map((a) => Achievement.fromJson(a as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<Achievement> getAchievement(String achievementId) async {
+    try {
+      final res =
+          await _dio.get<Map<String, dynamic>>('/achievements/$achievementId');
+      return Achievement.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<Achievement> updateAchievement(
+    String achievementId, {
+    String? rawText,
+    DateTime? occurredAt,
+    String? employmentId,
+  }) async {
+    try {
+      final res = await _dio.patch<Map<String, dynamic>>(
+        '/achievements/$achievementId',
+        data: {
+          if (rawText != null) 'raw_text': rawText,
+          if (occurredAt != null) 'occurred_at': _ymd(occurredAt),
+          if (employmentId != null) 'employment_id': employmentId,
+        },
+      );
+      return Achievement.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<void> deleteAchievement(String achievementId) async {
+    try {
+      await _dio.delete<Map<String, dynamic>>('/achievements/$achievementId');
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<AchievementDigest> getAchievementDigest({int months = 6}) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/achievements/digest',
+        queryParameters: {'months': months},
+      );
+      return AchievementDigest.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<List<AchievementEvidence>> getQuestionEvidence(
+    String questionId, {
+    int limit = 3,
+  }) async {
+    try {
+      final res = await _dio.get<List<dynamic>>(
+        '/coach/questions/$questionId/evidence',
+        queryParameters: {'limit': limit},
+      );
+      return (res.data!)
+          .map((e) => AchievementEvidence.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  // ─── Interview practice ────────────────────────────────
+
+  @override
+  Future<List<PracticeQuestion>> getPracticeQuestions({
+    String? category,
+    int limit = 20,
+  }) async {
+    try {
+      final res = await _dio.get<List<dynamic>>(
+        '/coach/questions',
+        queryParameters: {
+          if (category != null) 'category': category,
+          'limit': limit,
+        },
+      );
+      return (res.data!)
+          .map((q) => PracticeQuestion.fromJson(q as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<PracticeSession> startPracticeSession({
+    String? jobId,
+    int? confidenceBefore,
+  }) async {
+    try {
+      final res = await _dio.post<Map<String, dynamic>>(
+        '/coach/sessions',
+        data: {
+          if (jobId != null) 'job_id': jobId,
+          if (confidenceBefore != null) 'confidence_before': confidenceBefore,
+        },
+      );
+      return PracticeSession.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<List<PracticeSession>> listPracticeSessions({int limit = 20}) async {
+    try {
+      final res = await _dio.get<List<dynamic>>(
+        '/coach/sessions',
+        queryParameters: {'limit': limit},
+      );
+      return (res.data!)
+          .map((s) => PracticeSession.fromJson(s as Map<String, dynamic>))
+          .toList();
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<PracticeSession> getPracticeSession(String sessionId) async {
+    try {
+      final res =
+          await _dio.get<Map<String, dynamic>>('/coach/sessions/$sessionId');
+      return PracticeSession.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<PracticeSession> updatePracticeSession(
+    String sessionId, {
+    bool? ended,
+    int? confidenceAfter,
+  }) async {
+    try {
+      final res = await _dio.patch<Map<String, dynamic>>(
+        '/coach/sessions/$sessionId',
+        data: {
+          if (ended != null) 'ended': ended,
+          if (confidenceAfter != null) 'confidence_after': confidenceAfter,
+        },
+      );
+      return PracticeSession.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<AnalyzeStartResponse> uploadAnswer({
+    required String sessionId,
+    required List<int> bytes,
+    required String filename,
+    required String contentType,
+    String? questionId,
+    String? questionText,
+    void Function(double progress)? onProgress,
+  }) async {
+    try {
+      // ── Step 1: claim an upload slot ────────────────────────────────────
+      final presignRes = await _dio.post<Map<String, dynamic>>(
+        '/coach/sessions/$sessionId/answers/presign',
+        data: {
+          if (questionId != null) 'question_id': questionId,
+          if (questionId == null && questionText != null)
+            'question_text': questionText,
+          'filename': filename,
+          'content_type': contentType,
+          'file_size_bytes': bytes.length,
+        },
+      );
+      final presign = presignRes.data!;
+      final answerId = presign['answer_id'] as String;
+
+      // ── Step 2: straight to S3 ──────────────────────────────────────────
+      // Policy fields must precede the file, and the S3 policy pins the
+      // content type — so this must match what we asked for above.
+      final s3Form = FormData();
+      (presign['fields'] as Map<String, dynamic>).forEach((key, value) {
+        s3Form.fields.add(MapEntry(key, value.toString()));
+      });
+      final typeParts = contentType.split('/');
+      s3Form.files.add(MapEntry(
+        'file',
+        MultipartFile.fromBytes(
+          bytes,
+          filename: filename,
+          contentType: DioMediaType(typeParts.first, typeParts.last),
+        ),
+      ));
+
+      // Plain Dio — a JWT header breaks the S3 signature.
+      final s3Dio = Dio();
+      await s3Dio.post<void>(
+        presign['upload_url'] as String,
+        data: s3Form,
+        onSendProgress: (sent, total) {
+          if (total > 0) onProgress?.call(sent / total);
+        },
+        options: Options(
+          validateStatus: (status) => status != null && status < 400,
+        ),
+      );
+
+      // ── Step 3: confirm → 202, analysis starts ──────────────────────────
+      final confirmRes = await _dio.post<Map<String, dynamic>>(
+        '/coach/answers/$answerId/confirm',
+      );
+      return AnalyzeStartResponse.fromJson(confirmRes.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<PracticeAnswer> getPracticeAnswer(String answerId) async {
+    try {
+      final res =
+          await _dio.get<Map<String, dynamic>>('/coach/answers/$answerId');
+      return PracticeAnswer.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<CVTaskStatusResponse> getCoachTaskStatus(String taskId) async {
+    try {
+      final res =
+          await _dio.get<Map<String, dynamic>>('/coach/tasks/$taskId');
+      return CVTaskStatusResponse.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
 }
 
 // ─── fromJson for SkillGapResponse ─────────────────────────────

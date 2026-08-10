@@ -24,6 +24,10 @@ class _HomeScreenState extends State<HomeScreen> {
   List<RecommendedJob> _recommended = [];
   bool _loading = true;
 
+  /// null until known — the prompt stays hidden rather than flashing on
+  /// for users who did log something.
+  bool? _loggedThisWeek;
+
   @override
   void initState() {
     super.initState();
@@ -42,13 +46,21 @@ class _HomeScreenState extends State<HomeScreen> {
         .then<List<RecommendedJob>>((r) => r.items)
         .catchError((_) => <RecommendedJob>[]);
     final alertsFuture = context.read<AlertsProvider>().refresh();
+    // Same 7-day window the backend's weekly nudge uses.
+    final weekStart = DateTime.now().subtract(const Duration(days: 7));
+    final weekFuture = _api
+        .listAchievements(from: weekStart, limit: 1)
+        .then<bool?>((items) => items.isNotEmpty)
+        .catchError((_) => null);
     final result = await jobsFuture;
     final recommended = await recommendedFuture;
+    final loggedThisWeek = await weekFuture;
     await alertsFuture;
     if (mounted) {
       setState(() {
         _recentJobs = result.items;
         _recommended = recommended;
+        _loggedThisWeek = loggedThisWeek;
         _loading = false;
       });
     }
@@ -83,7 +95,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   Text(
-                    'Here\'s your job market overview',
+                    // Not "your job market overview" any more — the product
+                    // walks a career, and the first line users read should
+                    // say so.
+                    'Your career, at a glance',
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: isDark
                           ? AppColors.mutedForegroundDark
@@ -148,13 +163,25 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
+            // ─── This week's win ─────────────────────
+            // The weekly nudge is a push, and push is still gated on the
+            // Firebase ops step (#2b) — so in-app is currently the only
+            // place the habit prompt exists at all.
+            if (!_loading && _loggedThisWeek == false)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 0),
+                  child: _LogWinPrompt(isDark: isDark),
+                ),
+              ),
+
             // ─── Recent Alerts ───────────────────────
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
                 child: _SectionHeader(
                   title: 'Recent Alerts',
-                  onViewAll: () => context.go('/alerts'),
+                  onViewAll: () => context.push('/alerts'),
                 ),
               ),
             ),
@@ -273,6 +300,65 @@ class _HomeScreenState extends State<HomeScreen> {
     if (hour < 12) return 'Good morning';
     if (hour < 17) return 'Good afternoon';
     return 'Good evening';
+  }
+}
+
+// ─── Log-a-win prompt ──────────────────────────────────────────
+
+class _LogWinPrompt extends StatelessWidget {
+  final bool isDark;
+
+  const _LogWinPrompt({required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = isDark
+        ? AppColors.mutedForegroundDark
+        : AppColors.mutedForegroundLight;
+
+    return Card(
+      child: InkWell(
+        onTap: () => context.go('/career?log=1'),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.emoji_events_outlined,
+                    color: AppColors.warning),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'What did you ship this week?',
+                      style: theme.textTheme.bodyLarge
+                          ?.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Takes a minute. Future you — writing a CV or sitting an '
+                      'interview — will thank you.',
+                      style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, size: 18),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

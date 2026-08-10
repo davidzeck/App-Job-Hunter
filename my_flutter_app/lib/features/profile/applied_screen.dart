@@ -213,7 +213,7 @@ class _AppliedScreenState extends State<AppliedScreen> {
                     ),
                     const SizedBox(height: 20),
                     FilledButton.icon(
-                      onPressed: () => context.go('/alerts'),
+                      onPressed: () => context.push('/alerts'),
                       icon: const Icon(Icons.notifications_outlined, size: 18),
                       label: const Text('Go to Alerts'),
                     ),

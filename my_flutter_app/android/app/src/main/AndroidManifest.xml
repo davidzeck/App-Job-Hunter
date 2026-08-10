@@ -1,4 +1,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Interview practice records spoken answers. The recording is uploaded,
+         transcribed, and then deleted server-side — only the transcript and
+         scores are kept. The app never records without a visible indicator. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <application
         android:label="my_flutter_app"
         android:name="${applicationName}"

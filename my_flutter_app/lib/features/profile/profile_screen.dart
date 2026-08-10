@@ -86,6 +86,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                         const SizedBox(height: 24),
 
+                        // ─── Career State ──────────────────
+                        _SectionHeader('Where you are right now'),
+                        const SizedBox(height: 8),
+                        _CareerStateCard(
+                          careerState: _user!.careerState,
+                          isDark: isDark,
+                          onChanged: _onCareerStateChanged,
+                        ).animate().fadeIn(delay: 120.ms, duration: 400.ms),
+
+                        const SizedBox(height: 24),
+
                         // ─── Appearance ────────────────────
                         _SectionHeader('Appearance'),
                         const SizedBox(height: 8),
@@ -170,6 +181,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Future<void> _onCareerStateChanged(String careerState) async {
+    try {
+      await _api.updateCareerState(careerState);
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    }
+  }
+
   Future<void> _onPrefsChanged(String key, dynamic value) async {
     final notifs = Map<String, dynamic>.from(
       (_user!.preferences['notifications'] as Map? ?? {}),
@@ -198,6 +221,65 @@ class _SectionHeader extends StatelessWidget {
         fontWeight: FontWeight.w700,
         letterSpacing: 1.1,
         color: isDark ? AppColors.mutedForegroundDark : AppColors.mutedForegroundLight,
+      ),
+    );
+  }
+}
+
+// ─── Career State ──────────────────────────────────────────────
+
+/// A real column on the user, not a preferences key — it reconfigures which
+/// mode the product presents, so it lives here rather than in job filters.
+class _CareerStateCard extends StatelessWidget {
+  final String careerState;
+  final bool isDark;
+  final Future<void> Function(String) onChanged;
+
+  const _CareerStateCard({
+    required this.careerState,
+    required this.isDark,
+    required this.onChanged,
+  });
+
+  static const _blurbs = {
+    'actively_looking': 'Job alerts and interview practice come first.',
+    'open': 'Keep building the record; we surface the right roles when they appear.',
+    'not_looking': 'No job noise — just your log and how you are growing.',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = isDark
+        ? AppColors.mutedForegroundDark
+        : AppColors.mutedForegroundLight;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: careerStates.entries
+                  .map((e) => ChoiceChip(
+                        label: Text(e.value),
+                        selected: careerState == e.key,
+                        onSelected: (selected) {
+                          if (selected) onChanged(e.key);
+                        },
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _blurbs[careerState] ?? '',
+              style: theme.textTheme.bodySmall?.copyWith(color: muted),
+            ),
+          ],
+        ),
       ),
     );
   }

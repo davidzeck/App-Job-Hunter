@@ -43,6 +43,9 @@ class UserProfileResponse {
   final int skillsCount;
   final bool hasCv;
 
+  /// actively_looking | open | not_looking — drives which mode the app presents.
+  final String careerState;
+
   const UserProfileResponse({
     required this.id,
     required this.email,
@@ -56,6 +59,7 @@ class UserProfileResponse {
     required this.updatedAt,
     this.skillsCount = 0,
     this.hasCv = false,
+    this.careerState = 'open',
   });
 
   factory UserProfileResponse.fromJson(Map<String, dynamic> json) =>
@@ -74,6 +78,7 @@ class UserProfileResponse {
         updatedAt: DateTime.parse(json['updated_at'] as String),
         skillsCount: json['skills_count'] as int? ?? 0,
         hasCv: json['has_cv'] as bool? ?? false,
+        careerState: json['career_state'] as String? ?? 'open',
       );
 }
 
@@ -846,5 +851,456 @@ class CurateStartResponse {
         taskId: json['task_id'] as String,
         draftId: json['draft_id'] as String,
         status: json['status'] as String? ?? 'pending',
+      );
+}
+
+// ─── Career Memory (roadmap Phase C) ──────────────────────────
+
+/// The three career states the backend accepts on PATCH /users/me.
+const careerStates = <String, String>{
+  'actively_looking': 'Actively looking',
+  'open': 'Open to offers',
+  'not_looking': 'Not looking',
+};
+
+/// A role the user has held (backend EmploymentResponse).
+/// Employer and title are free text — most employers were never scraped.
+class Employment {
+  final String id;
+  final String employerName;
+  final String roleTitle;
+  final String? companyId;
+  final DateTime startDate;
+  final DateTime? endDate;
+  final bool isCurrent;
+  final String? seniority;
+
+  const Employment({
+    required this.id,
+    required this.employerName,
+    required this.roleTitle,
+    this.companyId,
+    required this.startDate,
+    this.endDate,
+    this.isCurrent = false,
+    this.seniority,
+  });
+
+  factory Employment.fromJson(Map<String, dynamic> json) => Employment(
+        id: json['id'] as String,
+        employerName: json['employer_name'] as String,
+        roleTitle: json['role_title'] as String,
+        companyId: json['company_id'] as String?,
+        startDate: DateTime.parse(json['start_date'] as String),
+        endDate: json['end_date'] != null
+            ? DateTime.parse(json['end_date'] as String)
+            : null,
+        isCurrent: json['is_current'] as bool? ?? false,
+        seniority: json['seniority'] as String?,
+      );
+}
+
+/// A logged win (backend AchievementResponse).
+///
+/// [rawText] is the permanent record — the Memory Charter forbids the AI from
+/// ever overwriting it. [structured] is derived and re-derivable, so it is
+/// always read defensively.
+class Achievement {
+  final String id;
+  final String? employmentId;
+  final DateTime occurredAt;
+  final String rawText;
+  final String captureMode;
+  final String status;
+  final String? error;
+  final String? headline;
+  final Map<String, dynamic> structured;
+
+  /// True when structuring found no concrete figure — the client asks for one,
+  /// mirroring the interview coach's metrics_injection drill.
+  final bool needsMetric;
+
+  const Achievement({
+    required this.id,
+    this.employmentId,
+    required this.occurredAt,
+    required this.rawText,
+    this.captureMode = 'text',
+    required this.status,
+    this.error,
+    this.headline,
+    this.structured = const {},
+    this.needsMetric = false,
+  });
+
+  bool get isStructuring => status == 'captured' || status == 'structuring';
+  bool get isStructured => status == 'structured';
+  bool get isFailed => status == 'failed';
+
+  String? get metric => _nonEmpty(structured['metric']);
+  String? get category => _nonEmpty(structured['category']);
+  String? get cvBullet => _nonEmpty(structured['cv_bullet']);
+  String? get action => _nonEmpty(structured['action']);
+  String? get impact => _nonEmpty(structured['impact']);
+  List<String> get skills => _stringList(structured['skills']);
+
+  /// What to render in a list: the AI headline, falling back to the user's
+  /// own words while structuring is still in flight.
+  String get displayTitle => _nonEmpty(headline) ?? rawText;
+
+  static String? _nonEmpty(dynamic v) {
+    final s = v?.toString().trim();
+    return (s == null || s.isEmpty) ? null : s;
+  }
+
+  factory Achievement.fromJson(Map<String, dynamic> json) => Achievement(
+        id: json['id'] as String,
+        employmentId: json['employment_id'] as String?,
+        occurredAt: DateTime.parse(json['occurred_at'] as String),
+        rawText: json['raw_text'] as String,
+        captureMode: json['capture_mode'] as String? ?? 'text',
+        status: json['status'] as String,
+        error: json['error'] as String?,
+        headline: json['headline'] as String?,
+        structured: json['structured'] as Map<String, dynamic>? ?? const {},
+        needsMetric: json['needs_metric'] as bool? ?? false,
+      );
+}
+
+/// 202 from POST /achievements — stored, structuring in the background.
+class AchievementStartResponse {
+  final String achievementId;
+  final String taskId;
+  final String status;
+
+  const AchievementStartResponse({
+    required this.achievementId,
+    required this.taskId,
+    this.status = 'pending',
+  });
+
+  factory AchievementStartResponse.fromJson(Map<String, dynamic> json) =>
+      AchievementStartResponse(
+        achievementId: json['achievement_id'] as String,
+        taskId: json['task_id'] as String,
+        status: json['status'] as String? ?? 'pending',
+      );
+}
+
+class MonthCount {
+  final String month; // "2026-08"
+  final int count;
+
+  const MonthCount({required this.month, required this.count});
+
+  factory MonthCount.fromJson(Map<String, dynamic> json) => MonthCount(
+        month: json['month'] as String,
+        count: json['count'] as int? ?? 0,
+      );
+}
+
+/// The always-on payoff (backend AchievementDigest). Every number is computed
+/// server-side in Python, so this renders with no AI dependency at all.
+class AchievementDigest {
+  final int months;
+  final int total;
+  final Map<String, int> byCategory;
+  final List<String> skills;
+  final int skillsCount;
+  final int withMetric;
+  final List<MonthCount> byMonth;
+  final int activeWeeks;
+  final String? narrative;
+
+  const AchievementDigest({
+    this.months = 6,
+    this.total = 0,
+    this.byCategory = const {},
+    this.skills = const [],
+    this.skillsCount = 0,
+    this.withMetric = 0,
+    this.byMonth = const [],
+    this.activeWeeks = 0,
+    this.narrative,
+  });
+
+  factory AchievementDigest.fromJson(Map<String, dynamic> json) =>
+      AchievementDigest(
+        months: json['months'] as int? ?? 6,
+        total: json['total'] as int? ?? 0,
+        byCategory: (json['by_category'] as Map<String, dynamic>? ?? {})
+            .map((k, v) => MapEntry(k, v as int)),
+        skills: _stringList(json['skills']),
+        skillsCount: json['skills_count'] as int? ?? 0,
+        withMetric: json['with_metric'] as int? ?? 0,
+        byMonth: (json['by_month'] as List<dynamic>? ?? [])
+            .map((m) => MonthCount.fromJson(m as Map<String, dynamic>))
+            .toList(),
+        activeWeeks: json['active_weeks'] as int? ?? 0,
+        narrative: json['narrative'] as String?,
+      );
+}
+
+// ─── Interview practice (roadmap Phase B) ─────────────────────
+
+/// A question from the practice bank (backend QuestionResponse).
+class PracticeQuestion {
+  final String id;
+  final String category; // behavioral | technical | situational | intro
+  final String question;
+  final List<String> skillTags;
+  final String? seniority;
+
+  const PracticeQuestion({
+    required this.id,
+    required this.category,
+    required this.question,
+    this.skillTags = const [],
+    this.seniority,
+  });
+
+  /// Only behavioural questions draw on "tell me about a time you…", which
+  /// is what the achievement log can supply evidence for.
+  bool get isBehavioral => category == 'behavioral';
+
+  factory PracticeQuestion.fromJson(Map<String, dynamic> json) =>
+      PracticeQuestion(
+        id: json['id'] as String,
+        category: json['category'] as String,
+        question: json['question'] as String,
+        skillTags: _stringList(json['skill_tags']),
+        seniority: json['seniority'] as String?,
+      );
+}
+
+/// Delivery metrics from the deterministic layer (backend speech_metrics).
+/// Computed from word timings, never from a model, so they are stable.
+class AnswerMetrics {
+  final int wordCount;
+  final double durationSeconds;
+  final double speakingSeconds;
+  final double wordsPerMinute;
+  final int fillerCount;
+  final double fillerPerMinute;
+  final Map<String, int> fillerBreakdown;
+  final int pauseCount;
+  final double longestPauseSeconds;
+  final double timeToFirstWordSeconds;
+  final String paceFlag; // slow | comfortable | fast | no_speech
+
+  const AnswerMetrics({
+    this.wordCount = 0,
+    this.durationSeconds = 0,
+    this.speakingSeconds = 0,
+    this.wordsPerMinute = 0,
+    this.fillerCount = 0,
+    this.fillerPerMinute = 0,
+    this.fillerBreakdown = const {},
+    this.pauseCount = 0,
+    this.longestPauseSeconds = 0,
+    this.timeToFirstWordSeconds = 0,
+    this.paceFlag = 'comfortable',
+  });
+
+  factory AnswerMetrics.fromJson(Map<String, dynamic> json) => AnswerMetrics(
+        wordCount: json['word_count'] as int? ?? 0,
+        durationSeconds: (json['duration_seconds'] as num?)?.toDouble() ?? 0,
+        speakingSeconds: (json['speaking_seconds'] as num?)?.toDouble() ?? 0,
+        wordsPerMinute: (json['words_per_minute'] as num?)?.toDouble() ?? 0,
+        fillerCount: json['filler_count'] as int? ?? 0,
+        fillerPerMinute: (json['filler_per_minute'] as num?)?.toDouble() ?? 0,
+        fillerBreakdown:
+            (json['filler_breakdown'] as Map<String, dynamic>? ?? {})
+                .map((k, v) => MapEntry(k, (v as num).toInt())),
+        pauseCount: json['pause_count'] as int? ?? 0,
+        longestPauseSeconds:
+            (json['longest_pause_seconds'] as num?)?.toDouble() ?? 0,
+        timeToFirstWordSeconds:
+            (json['time_to_first_word_seconds'] as num?)?.toDouble() ?? 0,
+        paceFlag: json['pace_flag'] as String? ?? 'comfortable',
+      );
+}
+
+/// The one thing to practise next (backend rubric.DRILLS).
+class AnswerDrill {
+  final String title;
+  final String why;
+  final String how;
+
+  const AnswerDrill({
+    required this.title,
+    required this.why,
+    required this.how,
+  });
+
+  factory AnswerDrill.fromJson(Map<String, dynamic> json) => AnswerDrill(
+        title: json['title'] as String? ?? '',
+        why: json['why'] as String? ?? '',
+        how: json['how'] as String? ?? '',
+      );
+}
+
+/// A recorded practice answer and its debrief (backend AnswerResponse).
+class PracticeAnswer {
+  final String id;
+  final String sessionId;
+  final String? questionId;
+  final String questionText;
+  final String status; // awaiting_audio | analyzing | scored | failed
+  final String? error;
+  final double? durationSeconds;
+  final String? transcriptText;
+  final AnswerMetrics? metrics;
+
+  /// Rubric axes, each 1–5: structure, evidence, relevance, conciseness.
+  final Map<String, int> scores;
+  final double? overallScore;
+  final List<String> strengths;
+  final List<String> improvements;
+  final String? nextFocus;
+  final AnswerDrill? drill;
+  final DateTime createdAt;
+
+  const PracticeAnswer({
+    required this.id,
+    required this.sessionId,
+    this.questionId,
+    required this.questionText,
+    required this.status,
+    this.error,
+    this.durationSeconds,
+    this.transcriptText,
+    this.metrics,
+    this.scores = const {},
+    this.overallScore,
+    this.strengths = const [],
+    this.improvements = const [],
+    this.nextFocus,
+    this.drill,
+    required this.createdAt,
+  });
+
+  bool get isAwaitingAudio => status == 'awaiting_audio';
+  bool get isAnalyzing => status == 'analyzing';
+  bool get isScored => status == 'scored';
+  bool get isFailed => status == 'failed';
+
+  factory PracticeAnswer.fromJson(Map<String, dynamic> json) {
+    final takeaways = json['takeaways'] as Map<String, dynamic>? ?? const {};
+    return PracticeAnswer(
+      id: json['id'] as String,
+      sessionId: json['session_id'] as String,
+      questionId: json['question_id'] as String?,
+      questionText: json['question_text'] as String? ?? '',
+      status: json['status'] as String,
+      error: json['error'] as String?,
+      durationSeconds: (json['duration_seconds'] as num?)?.toDouble(),
+      transcriptText: json['transcript_text'] as String?,
+      metrics: json['metrics'] != null
+          ? AnswerMetrics.fromJson(json['metrics'] as Map<String, dynamic>)
+          : null,
+      scores: (json['scores'] as Map<String, dynamic>? ?? {})
+          .map((k, v) => MapEntry(k, (v as num).toInt())),
+      overallScore: (json['overall_score'] as num?)?.toDouble(),
+      strengths: _stringList(takeaways['strengths']),
+      improvements: _stringList(takeaways['improvements']),
+      nextFocus: takeaways['next_focus'] as String?,
+      drill: json['drill'] != null
+          ? AnswerDrill.fromJson(json['drill'] as Map<String, dynamic>)
+          : null,
+      createdAt: DateTime.parse(json['created_at'] as String),
+    );
+  }
+}
+
+/// A practice sitting (backend SessionResponse).
+class PracticeSession {
+  final String id;
+  final String sessionType;
+  final String? jobId;
+  final DateTime startedAt;
+  final DateTime? endedAt;
+  final int? confidenceBefore;
+  final int? confidenceAfter;
+  final List<PracticeAnswer> answers;
+
+  const PracticeSession({
+    required this.id,
+    required this.sessionType,
+    this.jobId,
+    required this.startedAt,
+    this.endedAt,
+    this.confidenceBefore,
+    this.confidenceAfter,
+    this.answers = const [],
+  });
+
+  factory PracticeSession.fromJson(Map<String, dynamic> json) =>
+      PracticeSession(
+        id: json['id'] as String,
+        sessionType: json['session_type'] as String? ?? 'standalone_practice',
+        jobId: json['job_id'] as String?,
+        startedAt: DateTime.parse(json['started_at'] as String),
+        endedAt: json['ended_at'] != null
+            ? DateTime.parse(json['ended_at'] as String)
+            : null,
+        confidenceBefore: json['confidence_before'] as int?,
+        confidenceAfter: json['confidence_after'] as int?,
+        answers: (json['answers'] as List<dynamic>? ?? [])
+            .map((a) => PracticeAnswer.fromJson(a as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
+/// 202 from confirming a recording — analysis is running.
+class AnalyzeStartResponse {
+  final String taskId;
+  final String answerId;
+  final String status;
+
+  const AnalyzeStartResponse({
+    required this.taskId,
+    required this.answerId,
+    this.status = 'pending',
+  });
+
+  factory AnalyzeStartResponse.fromJson(Map<String, dynamic> json) =>
+      AnalyzeStartResponse(
+        taskId: json['task_id'] as String,
+        answerId: json['answer_id'] as String,
+        status: json['status'] as String? ?? 'pending',
+      );
+}
+
+/// An achievement offered as material for a specific interview question —
+/// the moment the log pays off back into the wedge.
+class AchievementEvidence {
+  final String id;
+  final DateTime occurredAt;
+  final String? headline;
+  final String? cvBullet;
+  final String? metric;
+  final List<String> matchedSkills;
+  final double relevance;
+
+  const AchievementEvidence({
+    required this.id,
+    required this.occurredAt,
+    this.headline,
+    this.cvBullet,
+    this.metric,
+    this.matchedSkills = const [],
+    this.relevance = 0,
+  });
+
+  factory AchievementEvidence.fromJson(Map<String, dynamic> json) =>
+      AchievementEvidence(
+        id: json['id'] as String,
+        occurredAt: DateTime.parse(json['occurred_at'] as String),
+        headline: json['headline'] as String?,
+        cvBullet: json['cv_bullet'] as String?,
+        metric: json['metric'] as String?,
+        matchedSkills: _stringList(json['matched_skills']),
+        relevance: (json['relevance'] as num?)?.toDouble() ?? 0,
       );
 }

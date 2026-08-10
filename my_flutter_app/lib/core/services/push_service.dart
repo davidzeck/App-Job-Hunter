@@ -9,7 +9,7 @@ import 'package:job_scout/core/services/service_locator.dart';
 
 /// Push-notification lifecycle: Firebase init, permission + token
 /// registration with the backend, token-rotation handling, and
-/// notification-tap deep links into `/jobs/:id`.
+/// notification-tap deep links.
 ///
 /// Degrades to a silent no-op when:
 ///   - the app runs in demo mode (no API_URL dart-define), or
@@ -24,9 +24,9 @@ class PushService {
   bool _tokenRegistered = false;
   StreamSubscription<String>? _refreshSub;
 
-  /// Job id from a notification tapped while the app was terminated.
+  /// Route from a notification tapped while the app was terminated.
   /// Consumed by MainShell once the authenticated UI is up.
-  String? _pendingJobId;
+  String? _pendingRoute;
 
   /// Set by main.dart — invoked for pushes received while the app is open
   /// (no system banner in that state; we refresh the in-app alerts badge).
@@ -47,17 +47,12 @@ class PushService {
     // Cold start caused by a notification tap (app was terminated):
     // the router doesn't exist yet, so stash the target for MainShell.
     final initial = await FirebaseMessaging.instance.getInitialMessage();
-    final initialJobId = initial?.data['job_id'];
-    if (initialJobId is String && initialJobId.isNotEmpty) {
-      _pendingJobId = initialJobId;
-    }
+    _pendingRoute = initial == null ? null : _routeFor(initial.data);
 
     // Backgrounded app brought forward by a tap: router is alive, go direct.
     FirebaseMessaging.onMessageOpenedApp.listen((message) {
-      final jobId = message.data['job_id'];
-      if (jobId is String && jobId.isNotEmpty) {
-        appRouter?.go('/jobs/$jobId');
-      }
+      final route = _routeFor(message.data);
+      if (route != null) appRouter?.go(route);
     });
 
     FirebaseMessaging.onMessage.listen((message) {
@@ -107,10 +102,26 @@ class PushService {
     }
   }
 
+  /// Map a notification payload to an in-app route.
+  ///
+  /// `job_id` is the alert payload (no `type` field, so it stays first for
+  /// backward compatibility); `type` carries everything added since.
+  static String? _routeFor(Map<String, dynamic> data) {
+    final jobId = data['job_id'];
+    if (jobId is String && jobId.isNotEmpty) return '/jobs/$jobId';
+
+    return switch (data['type']) {
+      // The Friday "what did you ship this week?" nudge opens capture directly
+      // — a habit prompt that lands you on a list is a prompt people ignore.
+      'achievement_nudge' => '/career?log=1',
+      _ => null,
+    };
+  }
+
   /// One-shot read of a cold-start deep-link target.
-  String? consumePendingJobId() {
-    final id = _pendingJobId;
-    _pendingJobId = null;
-    return id;
+  String? consumePendingRoute() {
+    final route = _pendingRoute;
+    _pendingRoute = null;
+    return route;
   }
 }

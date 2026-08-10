@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import 'package:job_scout/core/models/models.dart';
 import 'package:job_scout/core/providers/jobs_filter_provider.dart';
@@ -170,6 +171,15 @@ class _JobsScreenState extends State<JobsScreen> {
                   fontWeight: FontWeight.w700,
                 ),
               ),
+              actions: [
+                // Companies lost its tab to My Career — browsing employers is
+                // a way into jobs, not a destination of its own.
+                IconButton(
+                  tooltip: 'Browse companies',
+                  icon: const Icon(Icons.business_outlined),
+                  onPressed: () => context.push('/companies'),
+                ),
+              ],
               bottom: PreferredSize(
                 preferredSize: const Size.fromHeight(60),
                 child: Padding(

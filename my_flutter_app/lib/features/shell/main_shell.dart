@@ -15,11 +15,16 @@ class MainShell extends StatefulWidget {
 }
 
 class _MainShellState extends State<MainShell> {
+  // Practice and My Career hold top-level slots because feature placement is
+  // positioning: if nothing in the nav says career, the app reads as a job
+  // board no matter what the copy claims. The two displaced tabs kept their
+  // screens and moved to where they are actually used from — Companies is a
+  // way into Jobs, and Alerts is a feed Home already surfaces.
   static const _tabs = [
     '/home',
     '/jobs',
-    '/companies',
-    '/alerts',
+    '/practice',
+    '/career',
     '/profile',
   ];
 
@@ -31,9 +36,9 @@ class _MainShellState extends State<MainShell> {
       if (!mounted) return;
       context.read<AlertsProvider>().refresh();
       // App launched from a notification tap while terminated: the router
-      // didn't exist yet, so PushService stashed the target job.
-      final jobId = PushService.instance.consumePendingJobId();
-      if (jobId != null) context.push('/jobs/$jobId');
+      // didn't exist yet, so PushService stashed the target route.
+      final route = PushService.instance.consumePendingRoute();
+      if (route != null) context.push(route);
     });
   }
 
@@ -56,9 +61,21 @@ class _MainShellState extends State<MainShell> {
         selectedIndex: index,
         onDestinationSelected: (i) => context.go(_tabs[i]),
         destinations: [
-          const NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home),
+          // Alerts lost its tab to Practice, so the unread badge lives here —
+          // Home is where the alerts feed now surfaces.
+          NavigationDestination(
+            icon: Badge(
+              isLabelVisible: unreadCount > 0,
+              label: Text('$unreadCount'),
+              backgroundColor: AppColors.destructive,
+              child: const Icon(Icons.home_outlined),
+            ),
+            selectedIcon: Badge(
+              isLabelVisible: unreadCount > 0,
+              label: Text('$unreadCount'),
+              backgroundColor: AppColors.destructive,
+              child: const Icon(Icons.home),
+            ),
             label: 'Home',
           ),
           const NavigationDestination(
@@ -67,24 +84,14 @@ class _MainShellState extends State<MainShell> {
             label: 'Jobs',
           ),
           const NavigationDestination(
-            icon: Icon(Icons.business_outlined),
-            selectedIcon: Icon(Icons.business),
-            label: 'Companies',
+            icon: Icon(Icons.mic_none_outlined),
+            selectedIcon: Icon(Icons.mic),
+            label: 'Practice',
           ),
-          NavigationDestination(
-            icon: Badge(
-              isLabelVisible: unreadCount > 0,
-              label: Text('$unreadCount'),
-              backgroundColor: AppColors.destructive,
-              child: const Icon(Icons.notifications_outlined),
-            ),
-            selectedIcon: Badge(
-              isLabelVisible: unreadCount > 0,
-              label: Text('$unreadCount'),
-              backgroundColor: AppColors.destructive,
-              child: const Icon(Icons.notifications),
-            ),
-            label: 'Alerts',
+          const NavigationDestination(
+            icon: Icon(Icons.emoji_events_outlined),
+            selectedIcon: Icon(Icons.emoji_events),
+            label: 'My Career',
           ),
           const NavigationDestination(
             icon: Icon(Icons.person_outline),

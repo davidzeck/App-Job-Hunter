@@ -18,7 +18,7 @@ Singleton over the shared Dio from [`api_client.dart`](../my_flutter_app/lib/cor
 
 | Area | Calls |
 |---|---|
-| Auth | `POST /auth/login` ⚠️, `POST /auth/register`, `GET /users/me`, `POST /auth/refresh` (interceptor only) |
+| Auth | `POST /auth/login` (OAuth2 form, not JSON), `POST /auth/register`, `GET /users/me`, `POST /auth/refresh` (interceptor only) |
 | Jobs | `GET /jobs` (query: repeated `company`, `location`, `role`, `location_type`, `days_ago`, `page`, `limit`), `GET /jobs/recommended` (skill-matched feed), `GET /jobs/{id}`, `GET /jobs/{id}/skill-gap` |
 | Companies | `GET /companies` |
 | Alerts | `GET /alerts` (`unread_only`, `page`, `limit`), `PATCH /alerts/{id}/read`, `PATCH /alerts/{id}/saved`, `PATCH /alerts/{id}/applied` |
@@ -28,8 +28,20 @@ Singleton over the shared Dio from [`api_client.dart`](../my_flutter_app/lib/cor
 | CV | `POST /users/me/cv/presign`, `POST /users/me/cv/{id}/confirm`, `GET /users/me/cv`, `GET /users/me/cv/{id}/download-url`, `DELETE /users/me/cv/{id}` |
 | AI/ATS | `POST /users/me/cv/{id}/analyze`, `POST /users/me/cv/{id}/tailor`, `GET /users/me/cv/tasks/{taskId}` |
 | CV drafts | `POST /users/me/cv/{id}/curate`, `GET /users/me/cv/drafts`, `GET/PATCH /users/me/cv/drafts/{id}`, `POST /users/me/cv/drafts/{id}/approve`, `GET /users/me/cv/drafts/{id}/download?format=pdf\|docx` |
+| Career state | `PATCH /users/me` (`career_state`) |
+| Employments | `GET/POST /employments`, `PATCH/DELETE /employments/{id}` |
+| Achievements | `POST /achievements` (202), `GET /achievements` (`from`, `to`, `employment_id`, `category`, `limit`), `GET/PATCH/DELETE /achievements/{id}`, `GET /achievements/digest?months=` |
+| Interview evidence | `GET /coach/questions/{id}/evidence` — the "you have N real examples" prompt on behavioural questions |
+| Practice | `GET /coach/questions` (`category`, `limit`), `POST /coach/sessions`, `GET /coach/sessions`, `GET/PATCH /coach/sessions/{id}` |
+| Practice answers | `POST /coach/sessions/{id}/answers/presign`, `POST /coach/answers/{id}/confirm` (202), `GET /coach/answers/{id}`, `GET /coach/tasks/{taskId}` |
 
-> ⚠️ **Login contract mismatch**: `login()` sends `FormData {username, password}` as `application/x-www-form-urlencoded` (assuming FastAPI's `OAuth2PasswordRequestForm`), but the backend expects **JSON `{email, password}`** — real-backend login currently 422s. See [known issue #1](../../docs/known-issues.md). Demo mode is unaffected.
+**Recording upload** mirrors the CV flow: presign -> direct-to-S3 -> confirm. Two audio-specific rules:
+- The presign request declares `content_type`, and the S3 policy **pins that exact value** — so the `Content-Type` policy field and the file part's own content type must match what was asked for (`audio/mp4` for the AAC/m4a the recorder produces).
+- Rejections the client handles explicitly: **415** unsupported type, **413** over 60 MB, **422** no question supplied, **424** confirm before the upload landed.
+
+**Dates**: employment and achievement dates are Postgres `date` columns, so `ApiService._ymd()` sends bare `YYYY-MM-DD`. Sending a full ISO datetime is a 422.
+
+**Achievement capture is asynchronous.** `POST /achievements` returns **202** with a `task_id` and a `status` of `captured`/`structuring`; the client polls `GET /achievements/{id}` every 2 s (≤10 tries) and only then knows whether `needs_metric` is set. Nothing waits on the model call, because a habit feature that stalls is a habit feature people abandon.
 
 Pagination: Flutter consumes the backend's `PaginatedResponse` shape (`items,total,page,limit,pages`) directly — no field renaming (unlike the dashboard).
 

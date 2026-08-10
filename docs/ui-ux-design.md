@@ -42,7 +42,7 @@ Mode switching: [`theme_provider.dart`](../my_flutter_app/lib/core/theme/theme_p
 - **Bottom NavigationBar** (5 tabs) inside a `ShellRoute` with `NoTransitionPage` — tab switches are instant; detail screens push full-screen on top.
 - **Infinite scroll + pull-to-refresh** on Jobs and Alerts; page size varies by screen (jobs 5 when company-filtered, alerts 4).
 - **Debounced search** on Jobs; filter chips for location type and a days-ago selector (`1/3/7/14/30`).
-- **Cross-screen filter handoff**: tapping a company on the Companies screen sets `JobsFilterProvider.filterByCompany()` and jumps to Jobs — clear the filter chip to reset.
+- **Cross-screen filter handoff**: tapping a company on the Companies screen sets `JobsFilterProvider.filterByCompany()` and jumps to Jobs — clear the filter chip to reset. Companies is reached from the Jobs app bar; it stopped being a tab in 2026-08-10 when **My Career** took the slot, on the principle that **feature placement is positioning** — if nothing in the nav says "career", the app reads as a job board whatever the copy claims.
 - **Optimistic toggles**: alert read/saved/applied flip locally (`AlertResponse` is mutable) then sync.
 - **Progressive disclosure on Job Detail**: skill-gap and AI sections are expandable; AI results render in place with explicit analyzing/tailoring progress states.
 - **External actions** via `url_launcher` (Apply opens the real posting).

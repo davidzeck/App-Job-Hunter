@@ -142,4 +142,127 @@ abstract class ApiServiceBase {
   /// Presigned download URL for a rendered document. 409 until rendered.
   /// [format] is 'pdf' or 'docx'.
   Future<String> getDraftDownloadUrl(String draftId, String format);
+
+  // ─── Career state ──────────────────────────────────
+
+  /// Set career state: actively_looking | open | not_looking.
+  /// A real column on the user, not a preferences key — it reconfigures
+  /// which mode the product presents.
+  Future<void> updateCareerState(String careerState);
+
+  // ─── Employments ───────────────────────────────────
+
+  /// The caller's roles, most recent first.
+  Future<List<Employment>> listEmployments();
+
+  /// Add a role. Marking it current demotes any previous current role.
+  Future<Employment> createEmployment({
+    required String employerName,
+    required String roleTitle,
+    required DateTime startDate,
+    DateTime? endDate,
+    bool isCurrent = false,
+  });
+
+  Future<Employment> updateEmployment(
+    String employmentId, {
+    String? employerName,
+    String? roleTitle,
+    DateTime? startDate,
+    DateTime? endDate,
+    bool? isCurrent,
+  });
+
+  /// Soft delete — correcting a mistake must not erase career history.
+  Future<void> deleteEmployment(String employmentId);
+
+  // ─── Achievement log ───────────────────────────────
+
+  /// Log a win in your own words. Returns 202 immediately; structuring runs
+  /// in the background, because a habit feature that waits on a model call
+  /// is a habit feature people abandon.
+  Future<AchievementStartResponse> logAchievement(
+    String rawText, {
+    DateTime? occurredAt,
+    String? employmentId,
+  });
+
+  /// The caller's logged wins, most recent first.
+  Future<List<Achievement>> listAchievements({
+    DateTime? from,
+    DateTime? to,
+    String? employmentId,
+    String? category,
+    int limit = 50,
+  });
+
+  Future<Achievement> getAchievement(String achievementId);
+
+  /// Correct your own words (re-runs structuring) or re-file the entry.
+  Future<Achievement> updateAchievement(
+    String achievementId, {
+    String? rawText,
+    DateTime? occurredAt,
+    String? employmentId,
+  });
+
+  Future<void> deleteAchievement(String achievementId);
+
+  /// How you've grown — the payoff for someone who is *not* job hunting.
+  Future<AchievementDigest> getAchievementDigest({int months = 6});
+
+  /// Your real achievements that answer a given interview question.
+  /// Deterministic server-side ranking, no AI call.
+  Future<List<AchievementEvidence>> getQuestionEvidence(
+    String questionId, {
+    int limit = 3,
+  });
+
+  // ─── Interview practice ────────────────────────────────
+
+  /// Questions from the practice bank, optionally by category.
+  Future<List<PracticeQuestion>> getPracticeQuestions({
+    String? category,
+    int limit = 20,
+  });
+
+  /// Start a practice sitting.
+  Future<PracticeSession> startPracticeSession({
+    String? jobId,
+    int? confidenceBefore,
+  });
+
+  /// The caller's sittings, newest first (answers omitted).
+  Future<List<PracticeSession>> listPracticeSessions({int limit = 20});
+
+  /// One sitting with all its answers and debriefs.
+  Future<PracticeSession> getPracticeSession(String sessionId);
+
+  /// End a sitting and/or record how the user feels afterwards.
+  Future<PracticeSession> updatePracticeSession(
+    String sessionId, {
+    bool? ended,
+    int? confidenceAfter,
+  });
+
+  /// Upload a recorded answer: presign → S3 → confirm.
+  ///
+  /// Returns the 202 that starts analysis. The recording is transcribed,
+  /// measured, scored, and then **deleted server-side** — only the transcript
+  /// and scores survive.
+  Future<AnalyzeStartResponse> uploadAnswer({
+    required String sessionId,
+    required List<int> bytes,
+    required String filename,
+    required String contentType,
+    String? questionId,
+    String? questionText,
+    void Function(double progress)? onProgress,
+  });
+
+  /// One answer with its metrics, scores, takeaways and assigned drill.
+  Future<PracticeAnswer> getPracticeAnswer(String answerId);
+
+  /// Poll an analysis task.
+  Future<CVTaskStatusResponse> getCoachTaskStatus(String taskId);
 }

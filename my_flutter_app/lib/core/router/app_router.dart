@@ -1,4 +1,5 @@
 import 'package:go_router/go_router.dart';
+import 'package:job_scout/core/models/models.dart';
 import 'package:job_scout/core/providers/auth_provider.dart';
 import 'package:job_scout/features/auth/splash_screen.dart';
 import 'package:job_scout/features/auth/login_screen.dart';
@@ -10,6 +11,11 @@ import 'package:job_scout/features/jobs/jobs_screen.dart';
 import 'package:job_scout/features/jobs/job_detail_screen.dart';
 import 'package:job_scout/features/companies/companies_screen.dart';
 import 'package:job_scout/features/alerts/alerts_screen.dart';
+import 'package:job_scout/features/career/career_screen.dart';
+import 'package:job_scout/features/career/employments_screen.dart';
+import 'package:job_scout/features/practice/practice_screen.dart';
+import 'package:job_scout/features/practice/record_answer_screen.dart';
+import 'package:job_scout/features/practice/debrief_screen.dart';
 import 'package:job_scout/features/profile/profile_screen.dart';
 import 'package:job_scout/features/profile/skills_screen.dart';
 import 'package:job_scout/features/profile/applied_screen.dart';
@@ -88,15 +94,19 @@ GoRouter createRouter(AuthProvider authProvider) => appRouter = GoRouter(
               ),
             ),
             GoRoute(
-              path: '/companies',
-              pageBuilder: (_, __) => const NoTransitionPage(
-                child: CompaniesScreen(),
+              path: '/career',
+              pageBuilder: (_, state) => NoTransitionPage(
+                // ?log=1 comes from the weekly nudge notification — the
+                // prompt opens capture, not a list.
+                child: CareerScreen(
+                  openCapture: state.uri.queryParameters['log'] == '1',
+                ),
               ),
             ),
             GoRoute(
-              path: '/alerts',
+              path: '/practice',
               pageBuilder: (_, __) => const NoTransitionPage(
-                child: AlertsScreen(),
+                child: PracticeScreen(),
               ),
             ),
             GoRoute(
@@ -113,6 +123,40 @@ GoRouter createRouter(AuthProvider authProvider) => appRouter = GoRouter(
           path: '/jobs/:id',
           builder: (_, state) => JobDetailScreen(
             jobId: state.pathParameters['id']!,
+          ),
+        ),
+
+        // ─── Companies (pushed from Jobs, no longer a tab) ───
+        GoRoute(
+          path: '/companies',
+          builder: (_, __) => const CompaniesScreen(),
+        ),
+
+        // ─── Career sub-screens (outside shell) ────
+        GoRoute(
+          path: '/career/roles',
+          builder: (_, __) => const EmploymentsScreen(),
+        ),
+
+        // ─── Alerts (pushed from Home, no longer a tab) ───
+        GoRoute(
+          path: '/alerts',
+          builder: (_, __) => const AlertsScreen(),
+        ),
+
+        // ─── Interview practice sub-screens ────────
+        GoRoute(
+          path: '/practice/record/:id',
+          builder: (_, state) => RecordAnswerScreen(
+            questionId: state.pathParameters['id']!,
+            // The list hands the question over so the screen needn't refetch.
+            question: state.extra as PracticeQuestion?,
+          ),
+        ),
+        GoRoute(
+          path: '/practice/debrief/:id',
+          builder: (_, state) => DebriefScreen(
+            answerId: state.pathParameters['id']!,
           ),
         ),
 

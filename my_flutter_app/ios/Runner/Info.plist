@@ -2,6 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- Shown in the iOS mic permission prompt. Says what happens to the
+	     recording, because "allow microphone" with no reason is what people
+	     decline. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Job Scout records your practice interview answers so it can transcribe them and show you how you came across. Recordings are deleted right after analysis — only the transcript and your scores are kept.</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

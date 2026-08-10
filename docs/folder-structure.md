@@ -39,6 +39,8 @@ my_flutter_app/
 │       │   ├── login_screen.dart
 │       │   └── register_screen.dart
 │       ├── onboarding/onboarding_screen.dart   # multi-page intro, SharedPreferences flag
+│       ├── practice/                      # Practice tab: questions, recorder, debrief
+│       ├── career/                        # My Career tab: log, digest, capture sheet, roles
 │       ├── shell/main_shell.dart          # bottom NavigationBar (5 tabs) + alerts badge
 │       ├── home/home_screen.dart          # stats grid + recent alerts + recent jobs
 │       ├── jobs/
