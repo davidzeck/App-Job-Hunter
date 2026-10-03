@@ -119,4 +119,64 @@ void main() {
     await api.updateCareerState('not_looking');
     expect((await api.getCurrentUser()).careerState, 'not_looking');
   });
+
+  // ─── Market radar ──────────────────────────────────────────────
+
+  test('radar: logged beats claimed, and covered matches the statuses',
+      () async {
+    mockUserSkills = ['Python', 'AWS'];
+    final radar = await api.getMarketRadar();
+    final status = {for (final s in radar.skills) s.skill: s.status};
+
+    expect(status['Python'], 'evidenced'); // on the CV *and* in the log
+    expect(status['AWS'], 'on_cv');
+    expect(status['Go'], 'gap');
+    expect(radar.covered, radar.skills.where((s) => !s.isGap).length);
+    expect(radar.basis, 'current_role');
+    expect(radar.hasData, isTrue);
+  });
+
+  test('radar: no role yet means the default cohort', () async {
+    mockEmployments = [];
+    expect((await api.getMarketRadar()).usesDefaultCohort, isTrue);
+  });
+
+  test('radar parses the backend payload, including a reason', () {
+    // Shape copied from a live GET /career/radar (2026-10-03).
+    final radar = MarketRadar.fromJson({
+      'cohort_label': 'Engineering roles',
+      'role_family': 'backend',
+      'cohort_family': 'engineering',
+      'seniority_band': null,
+      'widened': true,
+      'basis': 'current_role',
+      'window_days': 180,
+      'postings': 202,
+      'companies': 9,
+      'skills': [
+        {
+          'skill': 'Python',
+          'category': 'languages',
+          'share': 0.327,
+          'companies': 6,
+          'status': 'on_cv',
+        },
+      ],
+      'covered': 1,
+      'reason': null,
+    });
+    expect(radar.widened, isTrue);
+    expect(radar.skills.single.share, closeTo(0.327, 1e-9));
+    expect(radar.skills.single.isOnCv, isTrue);
+
+    final none = MarketRadar.fromJson({
+      'role_family': 'other',
+      'basis': 'current_role',
+      'window_days': 180,
+      'skills': [],
+      'reason': 'role_not_covered',
+    });
+    expect(none.hasData, isFalse);
+    expect(none.roleNotCovered, isTrue);
+  });
 }

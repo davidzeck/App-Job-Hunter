@@ -211,6 +211,10 @@ abstract class ApiServiceBase {
   /// How you've grown — the payoff for someone who is *not* job hunting.
   Future<AchievementDigest> getAchievementDigest({int months = 6});
 
+  /// What roles like yours ask for, against your CV and your log — the
+  /// market radar. Deterministic server-side, no AI call.
+  Future<MarketRadar> getMarketRadar({int limit = 10});
+
   /// Your real achievements that answer a given interview question.
   /// Deterministic server-side ranking, no AI call.
   Future<List<AchievementEvidence>> getQuestionEvidence(
@@ -265,4 +269,11 @@ abstract class ApiServiceBase {
 
   /// Poll an analysis task.
   Future<CVTaskStatusResponse> getCoachTaskStatus(String taskId);
+
+  /// Session-over-session trends. Computed server-side with no AI, so it
+  /// costs nothing and can be loaded every time the screen opens.
+  Future<PracticeProgress> getPracticeProgress({int limit = 50});
+
+  /// The drill library with this user's history against each drill.
+  Future<List<PracticeDrill>> getPracticeDrills();
 }

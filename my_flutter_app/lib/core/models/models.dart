@@ -1041,6 +1041,90 @@ class AchievementDigest {
       );
 }
 
+// ─── Market radar (roadmap C6a) ───────────────────────────────
+
+/// One skill the cohort's postings ask for, and whether you have it.
+class RadarSkill {
+  final String skill;
+  final String? category;
+  final double share; // of the cohort's postings that ask for it, 0–1
+  final int companies; // employers asking
+  final String status; // evidenced | on_cv | gap
+
+  const RadarSkill({
+    required this.skill,
+    this.category,
+    this.share = 0,
+    this.companies = 0,
+    this.status = 'gap',
+  });
+
+  bool get isEvidenced => status == 'evidenced';
+  bool get isOnCv => status == 'on_cv';
+  bool get isGap => status == 'gap';
+
+  factory RadarSkill.fromJson(Map<String, dynamic> json) => RadarSkill(
+        skill: json['skill'] as String,
+        category: json['category'] as String?,
+        share: (json['share'] as num?)?.toDouble() ?? 0,
+        companies: json['companies'] as int? ?? 0,
+        status: json['status'] as String? ?? 'gap',
+      );
+}
+
+/// What roles like yours ask for, against what you have (backend
+/// MarketRadar). Deterministic server-side — no AI call.
+class MarketRadar {
+  final String cohortLabel; // "Senior backend roles"
+  final String roleFamily; // yours
+  final String? cohortFamily; // what was measured — wider when [widened]
+  final String? seniorityBand;
+  final bool widened;
+  final String basis; // current_role | past_role | default
+  final int windowDays;
+  final int postings;
+  final int companies;
+  final List<RadarSkill> skills;
+  final int covered;
+  final String? reason; // not_enough_postings | role_not_covered
+
+  const MarketRadar({
+    this.cohortLabel = '',
+    this.roleFamily = 'software_general',
+    this.cohortFamily,
+    this.seniorityBand,
+    this.widened = false,
+    this.basis = 'default',
+    this.windowDays = 180,
+    this.postings = 0,
+    this.companies = 0,
+    this.skills = const [],
+    this.covered = 0,
+    this.reason,
+  });
+
+  bool get hasData => reason == null && skills.isNotEmpty;
+  bool get roleNotCovered => reason == 'role_not_covered';
+  bool get usesDefaultCohort => basis == 'default';
+
+  factory MarketRadar.fromJson(Map<String, dynamic> json) => MarketRadar(
+        cohortLabel: json['cohort_label'] as String? ?? '',
+        roleFamily: json['role_family'] as String? ?? 'software_general',
+        cohortFamily: json['cohort_family'] as String?,
+        seniorityBand: json['seniority_band'] as String?,
+        widened: json['widened'] as bool? ?? false,
+        basis: json['basis'] as String? ?? 'default',
+        windowDays: json['window_days'] as int? ?? 180,
+        postings: json['postings'] as int? ?? 0,
+        companies: json['companies'] as int? ?? 0,
+        skills: (json['skills'] as List<dynamic>? ?? [])
+            .map((s) => RadarSkill.fromJson(s as Map<String, dynamic>))
+            .toList(),
+        covered: json['covered'] as int? ?? 0,
+        reason: json['reason'] as String?,
+      );
+}
+
 // ─── Interview practice (roadmap Phase B) ─────────────────────
 
 /// A question from the practice bank (backend QuestionResponse).
@@ -1249,6 +1333,169 @@ class PracticeSession {
         answers: (json['answers'] as List<dynamic>? ?? [])
             .map((a) => PracticeAnswer.fromJson(a as Map<String, dynamic>))
             .toList(),
+      );
+}
+
+/// One metric tracked over sittings (backend MetricTrend).
+///
+/// `verdict` respects the metric's own direction — `informational` ones
+/// (pauses, answer length) are shown but never judged, because they are
+/// trade-offs rather than faults.
+class MetricTrend {
+  final String? label;
+  final String? unit;
+  final List<double> series;
+  final double first;
+  final double latest;
+  final double best;
+  final double average;
+  final double delta;
+  final String direction;
+  final String verdict;
+
+  const MetricTrend({
+    this.label,
+    this.unit,
+    this.series = const [],
+    required this.first,
+    required this.latest,
+    required this.best,
+    required this.average,
+    required this.delta,
+    required this.direction,
+    required this.verdict,
+  });
+
+  bool get improved => verdict == 'improved';
+  bool get regressed => verdict == 'regressed';
+  bool get isJudged => verdict == 'improved' || verdict == 'regressed';
+
+  factory MetricTrend.fromJson(Map<String, dynamic> json) => MetricTrend(
+        label: json['label'] as String?,
+        unit: json['unit'] as String?,
+        series: (json['series'] as List<dynamic>? ?? [])
+            .map((v) => (v as num).toDouble())
+            .toList(),
+        first: (json['first'] as num?)?.toDouble() ?? 0,
+        latest: (json['latest'] as num?)?.toDouble() ?? 0,
+        best: (json['best'] as num?)?.toDouble() ?? 0,
+        average: (json['average'] as num?)?.toDouble() ?? 0,
+        delta: (json['delta'] as num?)?.toDouble() ?? 0,
+        direction: json['direction'] as String? ?? 'informational',
+        verdict: json['verdict'] as String? ?? 'insufficient_data',
+      );
+}
+
+/// Drills assigned over time (backend DrillHistory).
+class DrillHistory {
+  final int totalAssigned;
+  final Map<String, int> counts;
+  final String? current;
+  final AnswerDrill? currentDetail;
+
+  /// Drills that used to come up and no longer do — the clearest evidence
+  /// that practice actually fixed something.
+  final List<AnswerDrill> retired;
+
+  const DrillHistory({
+    this.totalAssigned = 0,
+    this.counts = const {},
+    this.current,
+    this.currentDetail,
+    this.retired = const [],
+  });
+
+  factory DrillHistory.fromJson(Map<String, dynamic> json) => DrillHistory(
+        totalAssigned: json['total_assigned'] as int? ?? 0,
+        counts: (json['counts'] as Map<String, dynamic>? ?? {})
+            .map((k, v) => MapEntry(k, (v as num).toInt())),
+        current: json['current'] as String?,
+        currentDetail: json['current_detail'] != null
+            ? AnswerDrill.fromJson(
+                json['current_detail'] as Map<String, dynamic>)
+            : null,
+        retired: (json['retired'] as List<dynamic>? ?? [])
+            .map((d) => AnswerDrill.fromJson(d as Map<String, dynamic>))
+            .toList(),
+      );
+}
+
+/// Session-over-session progress (backend ProgressResponse).
+/// Entirely deterministic server-side — no AI, so it always renders.
+class PracticeProgress {
+  final String rubricVersion;
+  final int answersCompared;
+
+  /// Answers scored under an older rubric, excluded from the trend so a
+  /// scale change can't masquerade as improvement.
+  final int answersExcludedOldRubric;
+  final bool hasTrend;
+  final Map<String, MetricTrend> delivery;
+  final Map<String, MetricTrend> rubric;
+  final MetricTrend? overall;
+  final DrillHistory drills;
+  final String? headline;
+
+  const PracticeProgress({
+    this.rubricVersion = 'v1',
+    this.answersCompared = 0,
+    this.answersExcludedOldRubric = 0,
+    this.hasTrend = false,
+    this.delivery = const {},
+    this.rubric = const {},
+    this.overall,
+    this.drills = const DrillHistory(),
+    this.headline,
+  });
+
+  static Map<String, MetricTrend> _trends(dynamic value) =>
+      (value as Map<String, dynamic>? ?? {}).map(
+        (k, v) => MapEntry(k, MetricTrend.fromJson(v as Map<String, dynamic>)),
+      );
+
+  factory PracticeProgress.fromJson(Map<String, dynamic> json) =>
+      PracticeProgress(
+        rubricVersion: json['rubric_version'] as String? ?? 'v1',
+        answersCompared: json['answers_compared'] as int? ?? 0,
+        answersExcludedOldRubric:
+            json['answers_excluded_old_rubric'] as int? ?? 0,
+        hasTrend: json['has_trend'] as bool? ?? false,
+        delivery: _trends(json['delivery']),
+        rubric: _trends(json['rubric']),
+        overall: json['overall'] != null
+            ? MetricTrend.fromJson(json['overall'] as Map<String, dynamic>)
+            : null,
+        drills: DrillHistory.fromJson(
+            json['drills'] as Map<String, dynamic>? ?? const {}),
+        headline: json['headline'] as String?,
+      );
+}
+
+/// A drill from the library plus this user's history against it.
+class PracticeDrill {
+  final String key;
+  final String title;
+  final String why;
+  final String how;
+  final int timesAssigned;
+  final bool isCurrent;
+
+  const PracticeDrill({
+    required this.key,
+    required this.title,
+    required this.why,
+    required this.how,
+    this.timesAssigned = 0,
+    this.isCurrent = false,
+  });
+
+  factory PracticeDrill.fromJson(Map<String, dynamic> json) => PracticeDrill(
+        key: json['key'] as String,
+        title: json['title'] as String? ?? '',
+        why: json['why'] as String? ?? '',
+        how: json['how'] as String? ?? '',
+        timesAssigned: json['times_assigned'] as int? ?? 0,
+        isCurrent: json['is_current'] as bool? ?? false,
       );
 }
 

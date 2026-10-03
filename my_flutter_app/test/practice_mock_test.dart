@@ -133,4 +133,73 @@ void main() {
     expect(drills.length, greaterThan(1),
         reason: 'a demo where every answer scores the same teaches nothing');
   });
+
+  // ── Progress (B3) ──────────────────────────────────────────────────────
+
+  Future<void> recordAnswers(MockApiService api, int n) async {
+    final session = await api.startPracticeSession();
+    for (var i = 0; i < n; i++) {
+      await api.uploadAnswer(
+        sessionId: session.id,
+        bytes: List.filled(64, 0),
+        filename: 'a$i.m4a',
+        contentType: 'audio/mp4',
+        questionId: 'q-002',
+      );
+    }
+    await Future.delayed(const Duration(seconds: 6));
+  }
+
+  test('progress refuses to show a trend from a single answer', () async {
+    await recordAnswers(api, 1);
+    final progress = await api.getPracticeProgress();
+    expect(progress.answersCompared, 1);
+    expect(progress.hasTrend, isFalse);
+    expect(progress.headline, isNull,
+        reason: 'one reading is a measurement, not a trend');
+  });
+
+  test('progress is empty and valid before anything is recorded', () async {
+    final progress = await api.getPracticeProgress();
+    expect(progress.answersCompared, 0);
+    expect(progress.hasTrend, isFalse);
+    expect(progress.delivery, isEmpty);
+    expect(progress.headline, isNull);
+  });
+
+  test('progress builds series once there are enough answers', () async {
+    await recordAnswers(api, 3);
+    final progress = await api.getPracticeProgress();
+
+    expect(progress.answersCompared, 3);
+    expect(progress.hasTrend, isTrue);
+    expect(progress.delivery['filler_per_minute']!.series.length, 3);
+    expect(progress.rubric.keys,
+        containsAll(['structure', 'evidence', 'relevance', 'conciseness']));
+    expect(progress.overall, isNotNull);
+  });
+
+  test('pauses are shown but never judged', () async {
+    await recordAnswers(api, 3);
+    final pauses = (await api.getPracticeProgress()).delivery['pause_count']!;
+    expect(pauses.verdict, 'informational');
+    expect(pauses.isJudged, isFalse,
+        reason: 'the pause_instead_of_filler drill asks for MORE pauses');
+    expect(pauses.series, isNotEmpty);
+  });
+
+  test('speaking pace is judged against a band, not a direction', () async {
+    await recordAnswers(api, 3);
+    final pace = (await api.getPracticeProgress()).delivery['words_per_minute']!;
+    expect(pace.direction, 'band_is_better');
+  });
+
+  test('the drill library reports how often each was assigned', () async {
+    await recordAnswers(api, 3);
+    final drills = await api.getPracticeDrills();
+    expect(drills, isNotEmpty);
+    expect(drills.map((d) => d.timesAssigned).reduce((a, b) => a + b),
+        greaterThan(0));
+    expect(drills.where((d) => d.isCurrent).length, lessThanOrEqualTo(1));
+  });
 }

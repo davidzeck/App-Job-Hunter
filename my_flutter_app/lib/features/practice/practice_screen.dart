@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import 'package:job_scout/core/models/models.dart';
 import 'package:job_scout/core/services/service_locator.dart';
 import 'package:job_scout/core/theme/app_theme.dart';
+import 'package:job_scout/features/practice/progress_card.dart';
 
 /// The wedge: rehearse an interview answer and find out how you came across.
 ///
@@ -21,6 +22,7 @@ class _PracticeScreenState extends State<PracticeScreen> {
   final _api = api;
   List<PracticeQuestion> _questions = [];
   List<PracticeAnswer> _recent = [];
+  PracticeProgress? _progress;
   String? _category;
   bool _loading = true;
   String? _error;
@@ -58,6 +60,12 @@ class _PracticeScreenState extends State<PracticeScreen> {
         _loading = false;
       });
     }
+    // Progress is deterministic server-side, so it is cheap to refresh on
+    // every open — but still secondary to the questions.
+    try {
+      final progress = await _api.getPracticeProgress();
+      if (mounted) setState(() => _progress = progress);
+    } catch (_) {}
     // History is secondary — a failure here must not hide the questions.
     try {
       final sessions = await _api.listPracticeSessions(limit: 10);
@@ -124,6 +132,18 @@ class _PracticeScreenState extends State<PracticeScreen> {
                               child: const Text('Retry'),
                             ),
                           ),
+                        ),
+                      ),
+                    ),
+
+                  // ─── Progress ─────────────────────────────
+                  if (_progress != null)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                        child: ProgressCard(
+                          progress: _progress!,
+                          isDark: isDark,
                         ),
                       ),
                     ),

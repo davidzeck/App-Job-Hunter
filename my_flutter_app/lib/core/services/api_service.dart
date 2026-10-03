@@ -762,6 +762,19 @@ class ApiService extends ApiServiceBase {
   }
 
   @override
+  Future<MarketRadar> getMarketRadar({int limit = 10}) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/career/radar',
+        queryParameters: {'limit': limit},
+      );
+      return MarketRadar.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
   Future<List<AchievementEvidence>> getQuestionEvidence(
     String questionId, {
     int limit = 3,
@@ -950,6 +963,31 @@ class ApiService extends ApiServiceBase {
       final res =
           await _dio.get<Map<String, dynamic>>('/coach/tasks/$taskId');
       return CVTaskStatusResponse.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<PracticeProgress> getPracticeProgress({int limit = 50}) async {
+    try {
+      final res = await _dio.get<Map<String, dynamic>>(
+        '/coach/progress',
+        queryParameters: {'limit': limit},
+      );
+      return PracticeProgress.fromJson(res.data!);
+    } on DioException catch (e) {
+      throw Exception(_message(e));
+    }
+  }
+
+  @override
+  Future<List<PracticeDrill>> getPracticeDrills() async {
+    try {
+      final res = await _dio.get<List<dynamic>>('/coach/drills');
+      return (res.data!)
+          .map((d) => PracticeDrill.fromJson(d as Map<String, dynamic>))
+          .toList();
     } on DioException catch (e) {
       throw Exception(_message(e));
     }

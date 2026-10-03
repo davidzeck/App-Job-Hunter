@@ -911,6 +911,52 @@ class MockApiService extends ApiServiceBase {
     ));
   }
 
+  @override
+  Future<MarketRadar> getMarketRadar({int limit = 10}) async {
+    // A fixed market — shape and numbers from the real dev corpus (Oct 2026) —
+    // scored against the mock CV and the mock log, so logging a win in demo
+    // mode visibly moves a skill from "on CV" to "in your log".
+    const market = [
+      ('Python', 'languages', 0.33, 6),
+      ('Go', 'languages', 0.32, 6),
+      ('AWS', 'cloud', 0.26, 6),
+      ('Kubernetes', 'devops', 0.25, 6),
+      ('SQL', 'languages', 0.24, 6),
+      ('Java', 'languages', 0.20, 4),
+      ('Machine Learning', 'ai_ml', 0.18, 5),
+      ('TypeScript', 'languages', 0.17, 6),
+      ('JavaScript', 'languages', 0.16, 5),
+      ('Mentoring', 'soft_skills', 0.16, 4),
+    ];
+    final logged = {
+      for (final a in mockAchievements) ...a.skills.map((s) => s.toLowerCase()),
+    };
+    final onCv = mockUserSkills.map((s) => s.toLowerCase()).toSet();
+    final skills = [
+      for (final (name, category, share, companies) in market.take(limit))
+        RadarSkill(
+          skill: name,
+          category: category,
+          share: share,
+          companies: companies,
+          status: logged.contains(name.toLowerCase())
+              ? 'evidenced'
+              : onCv.contains(name.toLowerCase())
+                  ? 'on_cv'
+                  : 'gap',
+        ),
+    ];
+    return _withDelay(MarketRadar(
+      cohortLabel: 'Engineering roles',
+      cohortFamily: 'engineering',
+      basis: mockEmployments.any((e) => e.isCurrent) ? 'current_role' : 'default',
+      postings: 202,
+      companies: 9,
+      skills: skills,
+      covered: skills.where((s) => !s.isGap).length,
+    ));
+  }
+
   // ─── Interview practice ────────────────────────────────
 
   @override
@@ -1133,6 +1179,144 @@ class MockApiService extends ApiServiceBase {
         orElse: () => throw Exception('Answer not found'),
       ),
     );
+  }
+
+  /// Mirrors the backend's L3 computation closely enough that the progress
+  /// UI is exercised honestly in demo mode — including the parts that refuse
+  /// to draw a conclusion.
+  @override
+  Future<PracticeProgress> getPracticeProgress({int limit = 50}) async {
+    _progressAnswers();
+    final scored = mockAnswers.where((a) => a.isScored).toList()
+      ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+
+    MetricTrend? trend(
+      List<double> values,
+      String label,
+      String unit,
+      String direction,
+    ) {
+      if (values.isEmpty) return null;
+      final first = values.first;
+      final latest = values.last;
+      String verdict;
+      if (values.length < 2) {
+        verdict = 'insufficient_data';
+      } else if (direction == 'informational') {
+        verdict = 'informational';
+      } else if (first == latest) {
+        verdict = 'steady';
+      } else if (direction == 'lower_is_better') {
+        verdict = latest < first ? 'improved' : 'regressed';
+      } else if (direction == 'band_is_better') {
+        double distance(double v) =>
+            v < 110 ? 110 - v : (v > 165 ? v - 165 : 0);
+        final d0 = distance(first), d1 = distance(latest);
+        verdict = d1 == d0 ? 'steady' : (d1 < d0 ? 'improved' : 'regressed');
+      } else {
+        verdict = latest > first ? 'improved' : 'regressed';
+      }
+      return MetricTrend(
+        label: label,
+        unit: unit,
+        series: values,
+        first: first,
+        latest: latest,
+        best: direction == 'lower_is_better'
+            ? values.reduce((a, b) => a < b ? a : b)
+            : values.reduce((a, b) => a > b ? a : b),
+        average: values.reduce((a, b) => a + b) / values.length,
+        delta: latest - first,
+        direction: direction,
+        verdict: verdict,
+      );
+    }
+
+    final delivery = <String, MetricTrend>{};
+    final fillers = scored
+        .map((a) => a.metrics?.fillerPerMinute)
+        .whereType<double>()
+        .toList();
+    final paces = scored
+        .map((a) => a.metrics?.wordsPerMinute)
+        .whereType<double>()
+        .toList();
+    final pauses = scored
+        .map((a) => a.metrics?.pauseCount.toDouble())
+        .whereType<double>()
+        .toList();
+    final f = trend(fillers, 'Filler words', 'per minute', 'lower_is_better');
+    final p = trend(paces, 'Speaking pace', 'wpm', 'band_is_better');
+    final pa = trend(pauses, 'Pauses', 'count', 'informational');
+    if (f != null) delivery['filler_per_minute'] = f;
+    if (p != null) delivery['words_per_minute'] = p;
+    if (pa != null) delivery['pause_count'] = pa;
+
+    final rubric = <String, MetricTrend>{};
+    for (final axis in ['structure', 'evidence', 'relevance', 'conciseness']) {
+      final values = scored
+          .map((a) => a.scores[axis]?.toDouble())
+          .whereType<double>()
+          .toList();
+      final t = trend(values, axis, '/5', 'higher_is_better');
+      if (t != null) rubric[axis] = t;
+    }
+
+    final assigned =
+        scored.map((a) => a.drill?.title).whereType<String>().toList();
+    final counts = <String, int>{};
+    for (final key in assigned) {
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+
+    return _withDelay(PracticeProgress(
+      answersCompared: scored.length,
+      hasTrend: scored.length >= 2,
+      delivery: delivery,
+      rubric: rubric,
+      overall: trend(
+        scored.map((a) => a.overallScore).whereType<double>().toList(),
+        'Overall',
+        '/5',
+        'higher_is_better',
+      ),
+      drills: DrillHistory(
+        totalAssigned: assigned.length,
+        counts: counts,
+        current: scored.isEmpty ? null : scored.last.drill?.title,
+        currentDetail: scored.isEmpty ? null : scored.last.drill,
+      ),
+      // Only claimed when something genuinely improved — a demo that always
+      // congratulates you teaches the wrong thing about the product.
+      headline: (f != null && f.verdict == 'improved')
+          ? 'Your filler rate dropped from ${f.first.toStringAsFixed(1)} to '
+              '${f.latest.toStringAsFixed(1)} per minute across '
+              '${scored.length} answers.'
+          : null,
+    ));
+  }
+
+  @override
+  Future<List<PracticeDrill>> getPracticeDrills() async {
+    final progress = await getPracticeProgress();
+    const library = {
+      'STAR scaffold': 'Your answer was hard to follow as a story.',
+      'Add one number': 'Your answer was credible but unverifiable.',
+      'Pause instead of filler': 'Filler words were carrying your thinking time.',
+      '90-second cap': 'The answer ran long enough to lose an interviewer.',
+      'Deliberate pace': 'You spoke fast enough to be hard to follow.',
+      'Answer first': 'You gave context before answering the actual question.',
+    };
+    return library.entries
+        .map((e) => PracticeDrill(
+              key: e.key.toLowerCase().replaceAll(' ', '_'),
+              title: e.key,
+              why: e.value,
+              how: 'Re-answer the same question with this in mind.',
+              timesAssigned: progress.drills.counts[e.key] ?? 0,
+              isCurrent: progress.drills.current == e.key,
+            ))
+        .toList();
   }
 
   @override

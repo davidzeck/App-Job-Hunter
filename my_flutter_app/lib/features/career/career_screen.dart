@@ -27,6 +27,7 @@ class _CareerScreenState extends State<CareerScreen> {
   final _api = api;
   AchievementDigest _digest = const AchievementDigest();
   List<Achievement> _achievements = [];
+  MarketRadar? _radar; // stays null if it fails — the card simply hides
   bool _loading = true;
   String? _error;
 
@@ -34,6 +35,7 @@ class _CareerScreenState extends State<CareerScreen> {
   void initState() {
     super.initState();
     _load();
+    _loadRadar();
     if (widget.openCapture) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _logWin();
@@ -63,6 +65,15 @@ class _CareerScreenState extends State<CareerScreen> {
     }
   }
 
+  /// Loaded apart from [_load]: the radar is a bonus on this screen, so its
+  /// failure hides one card and can never blank the log.
+  Future<void> _loadRadar() async {
+    try {
+      final radar = await _api.getMarketRadar();
+      if (mounted) setState(() => _radar = radar);
+    } catch (_) {}
+  }
+
   void _snack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -89,6 +100,7 @@ class _CareerScreenState extends State<CareerScreen> {
         if (achievement.isStructuring) continue;
         if (!mounted) return;
         await _load();
+        _loadRadar();
         if (achievement.needsMetric && mounted) {
           final added = await showAddMetricSheet(context, achievement);
           if (added && mounted) await _load();
@@ -98,6 +110,14 @@ class _CareerScreenState extends State<CareerScreen> {
         return; // Structuring is background work; a poll failure isn't fatal.
       }
     }
+  }
+
+  /// The cohort comes from your role, so a role change re-reads the radar.
+  Future<void> _openRoles() async {
+    await context.push('/career/roles');
+    if (!mounted) return;
+    _load();
+    _loadRadar();
   }
 
   Future<void> _delete(Achievement achievement) async {
@@ -167,7 +187,9 @@ class _CareerScreenState extends State<CareerScreen> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              onRefresh: _load,
+              onRefresh: () async {
+                await Future.wait([_load(), _loadRadar()]);
+              },
               color: AppColors.primaryBlue,
               child: CustomScrollView(
                 slivers: [
@@ -182,8 +204,7 @@ class _CareerScreenState extends State<CareerScreen> {
                       IconButton(
                         tooltip: 'Roles',
                         icon: const Icon(Icons.badge_outlined),
-                        onPressed: () =>
-                            context.push('/career/roles').then((_) => _load()),
+                        onPressed: _openRoles,
                       ),
                     ],
                   ),
@@ -216,6 +237,19 @@ class _CareerScreenState extends State<CareerScreen> {
                           .fadeIn(duration: 400.ms),
                     ),
                   ),
+
+                  // ─── The market radar — what roles like yours ask for ──
+                  if (_radar != null)
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                        child: _RadarCard(
+                          radar: _radar!,
+                          isDark: isDark,
+                          onAddRole: _openRoles,
+                        ).animate().fadeIn(duration: 400.ms),
+                      ),
+                    ),
 
                   if (_achievements.isEmpty)
                     SliverToBoxAdapter(
@@ -441,6 +475,173 @@ class _CategoryChip extends StatelessWidget {
             .textTheme
             .labelSmall
             ?.copyWith(color: color, fontWeight: FontWeight.w600),
+      ),
+    );
+  }
+}
+
+// ─── Market radar ──────────────────────────────────────────────
+
+/// What roles like yours ask for, against what you have. Every number
+/// arrives computed server-side with no AI, so there is no partial state.
+class _RadarCard extends StatelessWidget {
+  final MarketRadar radar;
+  final bool isDark;
+  final VoidCallback onAddRole;
+
+  const _RadarCard({
+    required this.radar,
+    required this.isDark,
+    required this.onAddRole,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = isDark
+        ? AppColors.mutedForegroundDark
+        : AppColors.mutedForegroundLight;
+    final months = (radar.windowDays / 30).round();
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.radar, size: 18, color: AppColors.primaryBlue),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    radar.hasData
+                        ? 'What ${radar.cohortLabel.toLowerCase()} ask for'
+                        : 'Market radar',
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            if (radar.hasData) ...[
+              Text(
+                '${radar.postings} postings · ${radar.companies} companies · '
+                'last $months months',
+                style: theme.textTheme.bodySmall?.copyWith(color: muted),
+              ),
+              if (radar.widened)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    'Too few postings for your exact role yet, so this is '
+                    'the wider pool.',
+                    style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                  ),
+                ),
+              const SizedBox(height: 12),
+              ...radar.skills.map((s) => _RadarRow(skill: s)),
+              const SizedBox(height: 4),
+              Text(
+                'You cover ${radar.covered} of the top ${radar.skills.length}.',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ] else
+              Text(
+                radar.roleNotCovered
+                    ? 'The radar reads engineering job postings, so it can\'t '
+                        'measure your current role yet.'
+                    : 'Not enough recent postings for roles like yours yet '
+                        '(${radar.postings} in the last $months months). It '
+                        'fills in as jobs come in.',
+                style: theme.textTheme.bodySmall?.copyWith(color: muted),
+              ),
+            if (radar.usesDefaultCohort)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: onAddRole,
+                  icon: const Icon(Icons.badge_outlined, size: 18),
+                  label: const Text('Add your current role to tailor this'),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+Color _radarColor(RadarSkill skill) => skill.isEvidenced
+    ? AppColors.success
+    : skill.isOnCv
+        ? AppColors.primaryBlue
+        : AppColors.warning;
+
+class _RadarRow extends StatelessWidget {
+  final RadarSkill skill;
+
+  const _RadarRow({required this.skill});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final color = _radarColor(skill);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 96,
+            child: Text(
+              skill.skill,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(fontWeight: FontWeight.w600),
+            ),
+          ),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: skill.share.clamp(0.0, 1.0),
+                minHeight: 6,
+                color: color,
+                backgroundColor: color.withValues(alpha: 0.12),
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 40,
+            child: Text(
+              '${(skill.share * 100).round()}%',
+              textAlign: TextAlign.right,
+              style: theme.textTheme.labelSmall,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            width: 76,
+            alignment: Alignment.center,
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(999),
+            ),
+            child: Text(
+              skill.isEvidenced
+                  ? 'In your log'
+                  : skill.isOnCv
+                      ? 'On CV'
+                      : 'Gap',
+              style: theme.textTheme.labelSmall
+                  ?.copyWith(color: color, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -31,6 +31,7 @@ Singleton over the shared Dio from [`api_client.dart`](../my_flutter_app/lib/cor
 | Career state | `PATCH /users/me` (`career_state`) |
 | Employments | `GET/POST /employments`, `PATCH/DELETE /employments/{id}` |
 | Achievements | `POST /achievements` (202), `GET /achievements` (`from`, `to`, `employment_id`, `category`, `limit`), `GET/PATCH/DELETE /achievements/{id}`, `GET /achievements/digest?months=` |
+| Market radar | `GET /career/radar?limit=` → `MarketRadar` (`getMarketRadar` in all three service files; the mock scores a fixed market against the mock CV and log) |
 | Interview evidence | `GET /coach/questions/{id}/evidence` — the "you have N real examples" prompt on behavioural questions |
 | Practice | `GET /coach/questions` (`category`, `limit`), `POST /coach/sessions`, `GET /coach/sessions`, `GET/PATCH /coach/sessions/{id}` |
 | Practice answers | `POST /coach/sessions/{id}/answers/presign`, `POST /coach/answers/{id}/confirm` (202), `GET /coach/answers/{id}`, `GET /coach/tasks/{taskId}` |
